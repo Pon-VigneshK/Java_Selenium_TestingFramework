@@ -1,0 +1,8 @@
+{
+  "selectqueries": {
+    "TestData": "select * from hrm_testdata;" },
+  "runnerlistqueries": {
+    "HRMRunnerlist": "select * from hrm_runmanager;"
+  }
+
+}
