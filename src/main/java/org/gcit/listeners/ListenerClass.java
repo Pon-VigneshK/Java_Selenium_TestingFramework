@@ -3,17 +3,23 @@ package org.gcit.listeners;
 import org.gcit.annotations.FrameworkAnnotation;
 import org.gcit.reports.ExtentLogger;
 import org.gcit.reports.ExtentReport;
-import org.testng.*;
+import org.testng.ISuite;
+import org.testng.ISuiteListener;
+import org.testng.ITestListener;
+import org.testng.ITestResult;
 
 import java.io.IOException;
 import java.util.Arrays;
+
+import static org.gcit.enums.LogType.*;
+import static org.gcit.logger.LogService.log;
 
 public class ListenerClass implements ITestListener, ISuiteListener {
     @Override
     public void onStart(ISuite suite) {
         ExtentReport.initReports(suite.getXmlSuite().getName());
-    }
 
+    }
     @Override
     public void onFinish(ISuite suite) {
         try {
@@ -25,39 +31,36 @@ public class ListenerClass implements ITestListener, ISuiteListener {
 
     @Override
     public void onTestStart(ITestResult result) {
-        ExtentReport.createTest(result.getMethod().getDescription());
-        ExtentReport.addAuthors(result.getMethod().getConstructorOrMethod().getMethod().getAnnotation(FrameworkAnnotation.class)
-                .author());
-        ExtentReport.addCategories(result.getMethod().getConstructorOrMethod().getMethod().getAnnotation(FrameworkAnnotation.class).category());
+        FrameworkAnnotation annotation = result.getMethod().getConstructorOrMethod()
+                .getMethod().getAnnotation(FrameworkAnnotation.class);
+        ExtentReport.createTest("<span style='color: green;'>TestCase Name:</span>"
+                + result.getMethod().getMethodName());
+//        ExtentReport.addAuthors(annotation.author());
+//        ExtentReport.addCategories(annotation.category());
     }
 
     @Override
     public void onTestSuccess(ITestResult result) {
         ExtentLogger.pass(result.getMethod().getMethodName() + " is passed !!", true);
+        log(INFO, result.getMethod().getMethodName() + " is passed !!");
+        log(INFO, "------------------------------------------------------------");
     }
 
     @Override
     public void onTestFailure(ITestResult result) {
-        ExtentLogger.fail(result.getMethod().getMethodName() + " is failed !!", true);
+        ExtentLogger.pass(result.getMethod().getMethodName() + " is failed !!", true);
+        ExtentLogger.fail(result.getThrowable().getMessage());
         ExtentLogger.fail(result.getThrowable().toString());
-        ExtentLogger.fail(Arrays.toString(result.getThrowable().getStackTrace()));
+        log(DEBUG, Arrays.toString(result.getThrowable().getStackTrace()));
+        log(ERROR, result.getMethod().getMethodName() + " is failed !!");
+        log(INFO, "------------------------------------------------------------");
     }
+
 
     @Override
     public void onTestSkipped(ITestResult result) {
         ExtentLogger.skip(result.getMethod().getMethodName() + " is skipped !!", true);
+        log(INFO, result.getMethod().getMethodName() + " is skipped !!");
+        log(INFO, "------------------------------------------------------------");
     }
-
-    @Override
-    public void onTestFailedButWithinSuccessPercentage(ITestResult result) {
-    }
-
-    @Override
-    public void onStart(ITestContext context) {
-    }
-
-    @Override
-    public void onFinish(ITestContext context) {
-    }
-
 }

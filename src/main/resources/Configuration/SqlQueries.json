@@ -1,8 +1,10 @@
 {
+  "//": "The select queries to retrieve data from the Test Data tables in the database",
   "selectqueries": {
-    "TestData": "select * from hrm_testdata;" },
+    "HRMLoginTestData": "select * from hrm_testdata;"
+  },
+  "//": "The runner list queries to retrieve data from the Runner List table in the database",
   "runnerlistqueries": {
     "HRMRunnerlist": "select * from hrm_runmanager;"
   }
-
 }

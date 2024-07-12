@@ -7,13 +7,6 @@
       "execute" : "yes",
       "testcasename" : "loginLogoutTest",
       "testdescription" : "To check whether the user can successfully log in and log out."
-    }, {
-      "count" : 1,
-      "id" : 2,
-      "priority" : 2,
-      "execute" : "yes",
-      "testcasename" : "newTest",
-      "testdescription" : "To check whether this test is executed"
     } ]
   }
 }

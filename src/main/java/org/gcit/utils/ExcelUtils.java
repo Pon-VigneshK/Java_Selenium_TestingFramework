@@ -5,6 +5,7 @@ import org.apache.poi.ss.usermodel.CellType;
 import org.apache.poi.xssf.usermodel.XSSFSheet;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.gcit.constants.FrameworkConstants;
+import org.gcit.enums.LogType;
 import org.gcit.exceptions.BaseException;
 import org.gcit.exceptions.ExcelFileNotFoundException;
 
@@ -14,6 +15,8 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+
+import static org.gcit.logger.LogService.log;
 
 public final class ExcelUtils {
     private ExcelUtils() {
@@ -38,11 +41,12 @@ public final class ExcelUtils {
                 }
                 list.add(map);
             }
-        }
-        catch (java.io.FileNotFoundException e) {
+        } catch (java.io.FileNotFoundException e) {
+            log(LogType.ERROR, "Excel file not found: " + e.getMessage());
             throw new ExcelFileNotFoundException("Excel file not found");
-        }catch (IOException e) {
-            throw new BaseException("Some error occurred while reading excel file");
+        } catch (IOException e) {
+            log(LogType.ERROR, "Error retrieving test data from Excel sheet: " + sheetname + ". " + e.getMessage());
+            throw new BaseException("Error retrieving test data from Excel sheet", e);
         }
         return list;
     }

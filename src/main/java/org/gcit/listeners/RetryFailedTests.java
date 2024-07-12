@@ -6,8 +6,8 @@ import org.testng.IRetryAnalyzer;
 import org.testng.ITestResult;
 
 public class RetryFailedTests implements IRetryAnalyzer {
+    private final int retries = Integer.parseInt(PropertyUtils.getValue(ConfigProperties.RETRYATTEMPTS));
     private int count = 0;
-    private final int retries = 0;
 
     @Override
     public boolean retry(ITestResult result) {

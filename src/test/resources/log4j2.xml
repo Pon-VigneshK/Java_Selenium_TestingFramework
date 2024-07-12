@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Configuration status="INFO">
+    <Appenders>
+        <File name="LogToFile" fileName="logs/execution-${date:yyyy-MM-dd_HH_mm_ss}.log">
+            <PatternLayout pattern="%d{yyyy-MM-dd HH:mm:ss} - (%p) %m%n"/>
+            <Policies>
+                <SizeBasedTriggeringPolicy size="1.9 MB"/>
+            </Policies>
+        </File>
+    </Appenders>
+    <Loggers>
+        <Root level="TRACE">
+            <AppenderRef ref="LogToFile"/>
+        </Root>
+    </Loggers>
+</Configuration>

@@ -11,10 +11,14 @@ import org.openqa.selenium.support.ui.WebDriverWait;
 import java.time.Duration;
 
 import static org.gcit.driver.DriverManager.getDriver;
+import static org.gcit.enums.LogType.ERROR;
+import static org.gcit.logger.LogService.log;
 
 public final class ExplicitWaitFactory {
+    private static final String LOG_TAG = ExplicitWaitFactory.class.getSimpleName();
 
-    private ExplicitWaitFactory(){}
+    private ExplicitWaitFactory() {
+    }
 
     public static WebElement performExplicitWait(WaitStrategy waitStrategy, By by) {
         WebDriverWait wait = new WebDriverWait(getDriver(), Duration.ofSeconds(FrameworkConstants.getExplicitWait()));
@@ -32,6 +36,7 @@ public final class ExplicitWaitFactory {
                     throw new IllegalStateException("Unsupported wait strategy: " + waitStrategy);
             }
         } catch (TimeoutException e) {
+            log(ERROR, LOG_TAG + ": Timeout waiting for element with " + waitStrategy + " strategy. Locator: " + by);
             e.printStackTrace();
         }
         return null;
