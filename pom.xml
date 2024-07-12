@@ -155,7 +155,7 @@
     </dependencies>
     <profiles>
         <profile>
-            <id>bridge_tests</id>
+            <id>demo_tests</id>
             <build>
                 <plugins>
                     <plugin>
