@@ -21,9 +21,6 @@ import java.net.URL;
 import java.util.List;
 import java.util.Objects;
 
-import static org.gcit.enums.ConfigProperties.RUNMODE;
-import static org.gcit.utils.PropertyUtils.getValue;
-
 public final class DriverSupplier {
 
     private static final String LOG_TAG = DriverSupplier.class.getSimpleName();
@@ -33,7 +30,8 @@ public final class DriverSupplier {
 
     public static WebDriver getWebDriver(String browser) throws MalformedURLException {
         WebDriver driver = null;
-        String runMode = getValue(RUNMODE);
+//        String runMode = getValue(RUNMODE);
+        String runMode = "local";
 
         if (Objects.isNull(DriverManager.getDriver())) {
             try {

@@ -20,6 +20,7 @@ public class ListenerClass implements ITestListener, ISuiteListener {
         ExtentReport.initReports(suite.getXmlSuite().getName());
 
     }
+
     @Override
     public void onFinish(ISuite suite) {
         try {

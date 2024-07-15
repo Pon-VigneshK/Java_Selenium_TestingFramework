@@ -1,7 +1,9 @@
 package org.gcit.listeners;
 
 import org.gcit.constants.FrameworkConstants;
+import org.gcit.enums.ConfigProperties;
 import org.gcit.utils.JsonUtils;
+import org.gcit.utils.PropertyUtils;
 import org.testng.IMethodInstance;
 import org.testng.IMethodInterceptor;
 import org.testng.ITestContext;
@@ -13,6 +15,7 @@ import java.util.Map;
 
 public class MethodInterceptor implements IMethodInterceptor {
     private static final Map<String, Integer> invocationCounts = new HashMap<>();
+    List<Map<String, Object>> list = new ArrayList<>();
 
     public static int getInvocation(String methodName) {
         return invocationCounts.getOrDefault(methodName, 1);
@@ -22,8 +25,23 @@ public class MethodInterceptor implements IMethodInterceptor {
     public List<IMethodInstance> intercept(List<IMethodInstance> methods, ITestContext iTestContext) {
         List<IMethodInstance> results = new ArrayList<>();
         // generate runner list json
-        JsonUtils.generateRunnerListJsonData();
-        List<Map<String, Object>> list = JsonUtils.getTestDetails(FrameworkConstants.getRunmanager());
+        String dataSource = PropertyUtils.getValue(ConfigProperties.DATASOURCE);
+        switch (dataSource.toLowerCase()) {
+            case "db":
+                JsonUtils.generateRunnerListJsonData();
+                list = JsonUtils.getTestDetails(FrameworkConstants.getRunmanager());
+                break;
+            case "excel":
+                JsonUtils.generateRunnerListJsonDataFromExcel(FrameworkConstants.getRunmangerExcelSheet());
+                list = JsonUtils.getTestDetails(FrameworkConstants.getRunmanager());
+                break;
+            case "json":
+                list = JsonUtils.getTestDetails(FrameworkConstants.getRunmanager());
+                break;
+            default:
+                throw new IllegalArgumentException("Unknown data source: " + dataSource);
+        }
+
         for (IMethodInstance methodInstance : methods) {
             for (Map<String, Object> testData : list) {
                 if (methodInstance.getMethod().getMethodName().equalsIgnoreCase(String.valueOf(testData.get("testcasename"))) &&

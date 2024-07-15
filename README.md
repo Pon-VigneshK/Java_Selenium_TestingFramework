@@ -3,6 +3,7 @@
 **Preferred Java Version : JDK-11**
 
 **Libraries Used**:
+
 1. [Selenium for UI automation](https://github.com/SeleniumHQ/selenium.git)
 2. [Maven as build tool](https://maven.apache.org/guides/)
 3. [TestNG as testing framework](https://testng.org/doc/)

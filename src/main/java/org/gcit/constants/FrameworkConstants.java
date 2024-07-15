@@ -26,6 +26,7 @@ public final class FrameworkConstants {
     private static final String DATABASE_PATH = TEST_RESOURCES_PATH + File.separator + "testdata" + File.separator + "database" + File.separator + "inputData.db";
     private static final String MAIN_RESOURCES_PATH = USER_DIR + File.separator + "src" + File.separator + "main" + File.separator + "resources";
     private static final String TESTCASE_JSON_PATH = MAIN_RESOURCES_PATH + File.separator + "runnerlist" + File.separator + "runmanager.json";
+    private static final String DBConfig_JSON_FILEPATH = MAIN_RESOURCES_PATH + File.separator + "Configuration" + File.separator + "DataBaseConfig.json";
     // Other constants
     private static final String SELECTQUERY_JSON_FILEPATH = MAIN_RESOURCES_PATH + File.separator + "Configuration" + File.separator + "SqlQueries.json";
     private static final String EXTENT_REPORT_PATH = USER_DIR + File.separator + "extent-test-output";
@@ -55,6 +56,10 @@ public final class FrameworkConstants {
 
     public static String getTestdataJsonFilepath() {
         return TESTDATAJSONFILEPATH;
+    }
+
+    public static String getDBConfigJSONPath() {
+        return DBConfig_JSON_FILEPATH;
     }
 
     public static String getExcelFilePath() {
@@ -146,13 +151,25 @@ public final class FrameworkConstants {
     public static void setTestDataJsonFilePath(String environmentName) {
         if (!flag) {
             if (Objects.isNull(environmentName))
-                TESTDATAJSONFILEPATH = TESTDATAJSONFILEPATH + "/" + environmentName.toUpperCase() + "_TestData.json";
+                TESTDATAJSONFILEPATH = TESTDATAJSONFILEPATH + File.separator + environmentName.toUpperCase() + "_TestData.json";
             else
-                TESTDATAJSONFILEPATH = TESTDATAJSONFILEPATH + "/" + getEnvironment().toUpperCase() + "_TestData.json";
+                TESTDATAJSONFILEPATH = TESTDATAJSONFILEPATH + File.separator + getEnvironment().toUpperCase() + "_TestData.json";
             flag = true;
         }
 
     }
+
+    public static String getTestDataJsonFilePath(String environmentName) {
+        if (!flag) {
+            if (Objects.isNull(environmentName))
+                return TESTDATAJSONFILEPATH + File.separator + "QA_TestData.json";  // Assuming a default name if environmentName is null
+            else
+                return TESTDATAJSONFILEPATH + File.separator + environmentName.toUpperCase() + "_TestData.json";
+        } else {
+            return "";
+        }
+    }
+
 
     public static String getDataExcelSheet() {
         return DATA_EXCEL_SHEET;
