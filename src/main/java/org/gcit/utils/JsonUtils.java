@@ -5,7 +5,6 @@ import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.JsonMappingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.gcit.constants.FrameworkConstants;
-import org.gcit.enums.ConfigProperties;
 import org.gcit.exceptions.InvalidFilepathException;
 import org.gcit.exceptions.JsonExceptions;
 import org.gcit.exceptions.SQLConnectionException;
@@ -42,6 +41,7 @@ public final class JsonUtils {
     private static LinkedHashMap<String,
             LinkedHashMap<String, ArrayList<HashMap<String, Object>>>>
             testRunnerHashMap = new LinkedHashMap();
+
     private JsonUtils() {
     }
 
@@ -119,6 +119,48 @@ public final class JsonUtils {
         return testDetailsList;
     }
 
+    public static List<Map<String, Object>> getJsonTestDataDetails() {
+        List<Map<String, Object>> finalDataList = new ArrayList<>();
+        FileInputStream fileInputStream = null;
+
+        try {
+            ObjectMapper objectMapper = new ObjectMapper();
+            objectMapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
+
+            fileInputStream = new FileInputStream(FrameworkConstants.getTestDataJsonFilePath(FrameworkConstants.getEnvironment()));
+            Map<String, Map<String, Object>> jsonTestDataMap = objectMapper.readValue(fileInputStream, Map.class);
+
+            Map<String, Object> jsonTestDataLinkedMap = jsonTestDataMap.get(FrameworkConstants.getEnvironment());
+
+            if (jsonTestDataLinkedMap != null) {
+                for (Map.Entry<String, Object> entry : jsonTestDataLinkedMap.entrySet()) {
+                    if (entry.getValue() instanceof List) {
+                        finalDataList.addAll((List<Map<String, Object>>) entry.getValue());
+                    } else {
+                        // Handle unexpected data structure if needed
+                    }
+                }
+            } else {
+                throw new RuntimeException("No data found for environment: " + FrameworkConstants.getEnvironment());
+            }
+
+        } catch (FileNotFoundException e) {
+            throw new InvalidFilepathException("Test data JSON file not found in the given path. Please check your path: " + FrameworkConstants.getTestDataJsonFilePath(), e);
+        } catch (IOException e) {
+            throw new RuntimeException("Error reading JSON file: " + e.getMessage(), e);
+        } finally {
+            if (fileInputStream != null) {
+                try {
+                    fileInputStream.close();
+                } catch (IOException e) {
+                    e.printStackTrace(); // Handle or log this exception properly
+                }
+            }
+        }
+
+        return finalDataList;
+    }
+
     public static List<Map<String, Object>> getTestDataDetails() {
         try {
             ObjectMapper objectMapper = new ObjectMapper();
@@ -187,7 +229,7 @@ public final class JsonUtils {
         try {
             Statement st = getMyConn().createStatement();
             HashMap<String, Object> queryDetails = getQueryDetails("select");
-            runEnv = PropertyUtils.getValue(ConfigProperties.ENV).trim().toLowerCase();
+            runEnv = FrameworkConstants.getEnvironment().trim().toLowerCase();
             for (Map.Entry<String, Object> mapdata : queryDetails.entrySet()) {
                 ResultSet resultSet = st.executeQuery((String) mapdata.getValue());
                 ResultSetMetaData resultSetMetaData = resultSet.getMetaData();

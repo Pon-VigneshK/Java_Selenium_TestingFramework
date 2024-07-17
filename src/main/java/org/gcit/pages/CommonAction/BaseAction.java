@@ -149,6 +149,7 @@ public class BaseAction {
             e.printStackTrace();
         }
     }
+
     protected String getTitle() {
         return getDriver().getTitle();
     }

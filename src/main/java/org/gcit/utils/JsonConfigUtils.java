@@ -16,15 +16,12 @@ import java.util.Objects;
 public class JsonConfigUtils {
     private static Map<String, String> CONFIGMAP;
 
-    private JsonConfigUtils() {
-    }
-
     static {
         try {
-            CONFIGMAP = new ObjectMapper().readValue(
-                    new File(FrameworkConstants.getDBConfigJSONPath()),
+            CONFIGMAP = new ObjectMapper().readValue(new File(FrameworkConstants.getDBConfigJSONPath()),
                     new TypeReference<HashMap<String, String>>() {
                     });
+
         } catch (FileNotFoundException e) {
             e.printStackTrace();
         } catch (IOException e) {
@@ -32,16 +29,17 @@ public class JsonConfigUtils {
         }
     }
 
-    public static String get(DataBaseProperties key) throws JsonExceptions {
-        if (Objects.isNull(key)) {
-            throw new JsonExceptions("Key is null. Please provide a valid key.");
-        }
+    private JsonConfigUtils() {
+    }
 
-        String value = CONFIGMAP.get(key.name().toLowerCase());
-        if (Objects.isNull(value)) {
+    public static String get(DataBaseProperties key) throws Exception {
+        try {
+            if (Objects.isNull(key) || Objects.isNull(CONFIGMAP.get(key.name().toLowerCase()))) {
+            }
+            return CONFIGMAP.get(key.name().toLowerCase());
+        } catch (Exception e) {
             throw new JsonExceptions("Property name " + key + " is not found in the JSON file. Please check the DataBaseConfig.json file.");
         }
 
-        return value;
     }
 }

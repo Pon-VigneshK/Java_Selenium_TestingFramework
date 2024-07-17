@@ -26,7 +26,7 @@
         <joda.version>2.10.14</joda.version>
         <commons.lang3.version>3.12.0</commons.lang3.version>
         <apche.poi.version>4.1.2</apche.poi.version>
-        <mysql.connector.version>8.0.29</mysql.connector.version>
+        <mysql.connector.version>8.0.33</mysql.connector.version>
         <rest.assured.version>5.4.0</rest.assured.version>
     </properties>
     <dependencies>
