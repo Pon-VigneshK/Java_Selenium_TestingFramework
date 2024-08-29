@@ -13,6 +13,7 @@ import java.util.Arrays;
 
 import static org.gcit.enums.LogType.*;
 import static org.gcit.logger.LogService.log;
+import static org.gcit.utils.ReportDatabaseController.storeReportInDatabase;
 
 public class ListenerClass implements ITestListener, ISuiteListener {
     @Override
@@ -43,6 +44,7 @@ public class ListenerClass implements ITestListener, ISuiteListener {
     @Override
     public void onTestSuccess(ITestResult result) {
         ExtentLogger.pass(result.getMethod().getMethodName() + " is passed !!", true);
+        storeReportInDatabase(result.getMethod().getMethodName(), "Pass");
         log(INFO, result.getMethod().getMethodName() + " is passed !!");
         log(INFO, "------------------------------------------------------------");
     }
@@ -50,6 +52,7 @@ public class ListenerClass implements ITestListener, ISuiteListener {
     @Override
     public void onTestFailure(ITestResult result) {
         ExtentLogger.pass(result.getMethod().getMethodName() + " is failed !!", true);
+        storeReportInDatabase(result.getMethod().getMethodName(), "Fail");
         ExtentLogger.fail(result.getThrowable().getMessage());
         ExtentLogger.fail(result.getThrowable().toString());
         log(DEBUG, Arrays.toString(result.getThrowable().getStackTrace()));
@@ -61,6 +64,7 @@ public class ListenerClass implements ITestListener, ISuiteListener {
     @Override
     public void onTestSkipped(ITestResult result) {
         ExtentLogger.skip(result.getMethod().getMethodName() + " is skipped !!", true);
+        storeReportInDatabase(result.getMethod().getMethodName(), "Skip");
         log(INFO, result.getMethod().getMethodName() + " is skipped !!");
         log(INFO, "------------------------------------------------------------");
     }
