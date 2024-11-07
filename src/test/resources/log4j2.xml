@@ -1,15 +1,15 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <Configuration status="INFO">
     <Appenders>
-        <File name="LogToFile" fileName="logs/execution-${date:yyyy-MM-dd_HH_mm_ss}.log">
+        <File name="LogToFile" fileName="logs/execution-${date:yyyy-MM-dd_HH_mm_ss}.log"> <!-- Ensure your framework supports date variable interpolation -->
             <PatternLayout pattern="%d{yyyy-MM-dd HH:mm:ss} - (%p) %m%n"/>
             <Policies>
-                <SizeBasedTriggeringPolicy size="1.9 MB"/>
+                <SizeBasedTriggeringPolicy size="2000000"/> <!-- Confirm if size can be in bytes if fractional MB is not supported -->
             </Policies>
         </File>
     </Appenders>
     <Loggers>
-        <Root level="TRACE">
+        <Root level="TRACE"> <!-- TRACE level can generate extensive logs, ensure this is intentional -->
             <AppenderRef ref="LogToFile"/>
         </Root>
     </Loggers>

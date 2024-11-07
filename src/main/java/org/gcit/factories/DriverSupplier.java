@@ -21,13 +21,40 @@ import java.net.URL;
 import java.util.List;
 import java.util.Objects;
 
+/**
+ * Utility class to provide a WebDriver instance based on the specified browser type.
+ * It supports Chrome, Firefox, and Edge browsers and can initialize drivers for both
+ * local and remote execution environments as defined by the configuration properties.
+ *
+ * Initialization settings include options for headless mode, window size adjustments,
+ * and various browser-specific configurations to ensure optimal test execution.
+ */
 public final class DriverSupplier {
 
+    /**
+     * A constant representing the log tag for the DriverSupplier class.
+     * This is used for identifying the source of log messages specific to DriverSupplier.
+     */
     private static final String LOG_TAG = DriverSupplier.class.getSimpleName();
 
+    /**
+     * Private constructor to prevent instantiation of the DriverSupplier class.
+     * This class provides utility methods to supply WebDriver instances based on the provided browser type.
+     */
     private DriverSupplier() {
     }
 
+    /**
+     * Initializes and returns a WebDriver instance based on the specified browser type.
+     * The method configures the WebDriver options for Chrome, Edge, and Firefox
+     * to support both local and remote execution modes.
+     *
+     * @param browser the name of the browser for which the WebDriver is to be initialized.
+     *                Supported values are "chrome", "edge", and "firefox".
+     * @return the initialized WebDriver instance.
+     * @throws MalformedURLException if the URL for the remote WebDriver is malformed.
+     * @throws RuntimeException if the browser type is unsupported or if there is an error initializing the WebDriver.
+     */
     public static WebDriver getWebDriver(String browser) throws MalformedURLException {
         WebDriver driver = null;
 //        String runMode = getValue(RUNMODE);

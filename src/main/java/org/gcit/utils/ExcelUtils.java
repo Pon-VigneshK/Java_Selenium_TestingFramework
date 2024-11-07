@@ -18,10 +18,27 @@ import java.util.Map;
 
 import static org.gcit.logger.LogService.log;
 
+/**
+ * Utility class for operations related to Excel files.
+ * Provides methods to extract data from Excel sheets for testing purposes.
+ */
 public final class ExcelUtils {
+    /**
+     * Private constructor to prevent instantiation of the ExcelUtils utility class.
+     * This class is designed to provide static methods for operations related to Excel files.
+     */
     private ExcelUtils() {
     }
 
+    /**
+     * Extracts test details from the specified Excel sheet and returns them as a list of maps.
+     * Each map represents a row in the sheet, with keys as column headers and values as cell values.
+     *
+     * @param sheetname The name of the Excel sheet from which to extract the test details.
+     * @return A list of maps containing the test details from the specified sheet.
+     * @throws ExcelFileNotFoundException If the Excel file is not found.
+     * @throws BaseException If an error occurs while reading the Excel sheet.
+     */
     public static List<Map<String, String>> getTestDetails(String sheetname) {
         List<Map<String, String>> list = new ArrayList<>();
         try (FileInputStream fs = new FileInputStream(FrameworkConstants.getExcelFilePath())) {
@@ -51,6 +68,12 @@ public final class ExcelUtils {
         return list;
     }
 
+    /**
+     * Converts the value of a given Excel cell into a string.
+     *
+     * @param cell the cell whose value needs to be converted to a string
+     * @return the string representation of the cell's value
+     */
     private static String convertCellValueToString(Cell cell) {
         if (cell == null) {
             return "";

@@ -13,10 +13,25 @@ import java.util.Objects;
 import static org.gcit.enums.LogType.INFO;
 import static org.gcit.logger.LogService.log;
 
+/**
+ * The Driver class is a utility for initializing and quitting WebDriver instances.
+ * It provides static methods to handle WebDriver setup and teardown operations.
+ */
 public final class Driver {
+    /**
+     * Private constructor to prevent instantiation of the Driver class.
+     * This class is intended to be used as a utility class with static methods only.
+     */
     private Driver() {
     }
 
+    /**
+     * Initializes the WebDriver instance for the specified browser and navigates to the configured URL.
+     *
+     * @param browser the name of the browser to initialize (e.g., "chrome", "firefox", "edge")
+     * @throws BrowserInvocationException if the WebDriver instance cannot be created
+     * @throws RuntimeException if an error occurs while navigating to the URL
+     */
     public static void initDriver(String browser) {
         try {
             DriverManager.setDriver(DriverSupplier.getWebDriver(browser));
@@ -37,6 +52,13 @@ public final class Driver {
         }
     }
 
+    /**
+     * Closes the WebDriver instance managed by DriverManager, logs the closure,
+     * and unloads the WebDriver instance.
+     *
+     * If there is an exception during the quit operation,
+     * logs the error message and still proceeds to unload the WebDriver instance.
+     */
     public static void quitDriver() {
         if (Objects.nonNull(DriverManager.getDriver())) {
             try {
