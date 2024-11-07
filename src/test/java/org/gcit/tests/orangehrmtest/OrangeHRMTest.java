@@ -2,7 +2,7 @@ package org.gcit.tests.orangehrmtest;
 
 import org.assertj.core.api.Assertions;
 import org.gcit.pages.orangehrmpage.HRMLoginPage;
-import org.gcit.tests.basesetup.BaseTest;
+import org.gcit.tests.BaseSetup.BaseTest;
 import org.testng.annotations.Test;
 
 import java.util.Map;

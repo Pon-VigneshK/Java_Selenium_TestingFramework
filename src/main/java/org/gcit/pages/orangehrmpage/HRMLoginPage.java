@@ -1,7 +1,7 @@
 package org.gcit.pages.orangehrmpage;
 
 import org.gcit.enums.WaitStrategy;
-import org.gcit.pages.commonaction.BaseAction;
+import org.gcit.pages.CommonAction.BaseAction;
 import org.openqa.selenium.By;
 
 public final class HRMLoginPage extends BaseAction {

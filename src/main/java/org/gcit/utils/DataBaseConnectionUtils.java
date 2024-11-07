@@ -49,7 +49,7 @@ public final class DataBaseConnectionUtils {
      *
      * This variable is initialized when the class is loaded and remains constant throughout the application lifecycle.
      */
-    private static String runmode = PropertyUtils.getValue(ConfigProperties.RUNMODE);
+    private static String runmode = "remote";
 
     static {
         try {
