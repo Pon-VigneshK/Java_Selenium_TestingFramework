@@ -3,7 +3,9 @@ package org.gcit.utils;
 import org.gcit.constants.FrameworkConstants;
 import org.gcit.enums.ConfigProperties;
 
-import java.sql.*;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.SQLException;
 import java.time.LocalDateTime;
 /**
  * Controller class for handling report database operations.
@@ -35,7 +37,7 @@ public class ReportDatabaseController {
      */
     public static void storeReportInDatabase(String testCaseName, String status) {
         if (PropertyUtils.getValue(ConfigProperties.RUNMODE).equalsIgnoreCase("local")){
-        String insertQuery = "INSERT INTO `result`.`demo` (`environment`, `testCaseName`, `status`, `executionTime`) VALUES (?, ?, ?, ?)";
+            String insertQuery = "INSERT INTO `ui_automation_result`.`hrm_result` (`environment`, `testCaseName`, `status`, `executionTime`) VALUES (?, ?, ?, ?)";
         try (Connection connection = DataBaseConnectionUtils.getMyConn();
              PreparedStatement statement = connection.prepareStatement(insertQuery)) {
             if (connection == null) {
@@ -49,5 +51,6 @@ public class ReportDatabaseController {
         } catch (SQLException e) {
             e.printStackTrace();
         }
-    }}
+        }
+    }
     }

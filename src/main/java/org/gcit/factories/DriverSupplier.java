@@ -4,7 +4,6 @@ import org.gcit.driver.DriverManager;
 import org.gcit.enums.ConfigProperties;
 import org.gcit.enums.LogType;
 import org.gcit.logger.LogService;
-import org.gcit.utils.PropertyUtils;
 import org.openqa.selenium.Dimension;
 import org.openqa.selenium.WebDriver;
 import org.openqa.selenium.chrome.ChromeDriver;
@@ -20,6 +19,9 @@ import java.net.MalformedURLException;
 import java.net.URL;
 import java.util.List;
 import java.util.Objects;
+
+import static org.gcit.enums.ConfigProperties.RUNMODE;
+import static org.gcit.utils.PropertyUtils.getValue;
 
 /**
  * Utility class to provide a WebDriver instance based on the specified browser type.
@@ -57,15 +59,15 @@ public final class DriverSupplier {
      */
     public static WebDriver getWebDriver(String browser) throws MalformedURLException {
         WebDriver driver = null;
-//        String runMode = getValue(RUNMODE);
-        String runMode = "local";
+        String runMode = getValue(RUNMODE);
+//        String runMode = "local";
 
         if (Objects.isNull(DriverManager.getDriver())) {
             try {
                 switch (browser.toLowerCase()) {
                     case "chrome":
                         final ChromeOptions chromeOptions = new ChromeOptions();
-                        if (PropertyUtils.getValue(ConfigProperties.BROWSERHEADLESSMODE).equalsIgnoreCase("Yes")) {
+                        if (getValue(ConfigProperties.BROWSERHEADLESSMODE).equalsIgnoreCase("Yes")) {
                             chromeOptions.addArguments("--headless");
                         }
                         chromeOptions.addArguments("--start-maximized");
@@ -74,7 +76,7 @@ public final class DriverSupplier {
                         chromeOptions.addArguments("--disable-gpu");
                         //chromeOptions.addArguments("--window-size","1920,1080");
                         if (runMode.equalsIgnoreCase("remote")) {
-                            driver = new RemoteWebDriver(new URL(PropertyUtils.getValue(ConfigProperties.SELENIUMGRIDADDRESS)), chromeOptions);
+                            driver = new RemoteWebDriver(new URL(getValue(ConfigProperties.SELENIUMGRIDADDRESS)), chromeOptions);
                         } else {
                             driver = new ChromeDriver(chromeOptions);
                         }
@@ -82,7 +84,7 @@ public final class DriverSupplier {
 
                     case "edge":
                         final EdgeOptions edgeOptions = new EdgeOptions();
-                        if (PropertyUtils.getValue(ConfigProperties.BROWSERHEADLESSMODE).equalsIgnoreCase("Yes")) {
+                        if (getValue(ConfigProperties.BROWSERHEADLESSMODE).equalsIgnoreCase("Yes")) {
                             edgeOptions.addArguments("--headless");
                         }
                         edgeOptions.addArguments("--start-maximized");
@@ -91,7 +93,7 @@ public final class DriverSupplier {
                         edgeOptions.addArguments("--disable-gpu");
                         //edgeOptions.addArguments("--window-size","1920,1080");
                         if (runMode.equalsIgnoreCase("remote")) {
-                            driver = new RemoteWebDriver(new URL(PropertyUtils.getValue(ConfigProperties.SELENIUMGRIDADDRESS)), edgeOptions);
+                            driver = new RemoteWebDriver(new URL(getValue(ConfigProperties.SELENIUMGRIDADDRESS)), edgeOptions);
                         } else {
                             driver = new EdgeDriver(edgeOptions);
                         }
@@ -99,7 +101,7 @@ public final class DriverSupplier {
 
                     case "firefox":
                         final FirefoxOptions firefoxOptions = new FirefoxOptions();
-                        if (PropertyUtils.getValue(ConfigProperties.BROWSERHEADLESSMODE).equalsIgnoreCase("Yes")) {
+                        if (getValue(ConfigProperties.BROWSERHEADLESSMODE).equalsIgnoreCase("Yes")) {
                             firefoxOptions.addArguments("--headless");
                         }
                         final FirefoxProfile profile = new FirefoxProfile();
@@ -116,7 +118,7 @@ public final class DriverSupplier {
                         firefoxOptions.setProfile(profile);
 
                         if (runMode.equalsIgnoreCase("remote")) {
-                            driver = new RemoteWebDriver(new URL(PropertyUtils.getValue(ConfigProperties.SELENIUMGRIDADDRESS)), firefoxOptions);
+                            driver = new RemoteWebDriver(new URL(getValue(ConfigProperties.SELENIUMGRIDADDRESS)), firefoxOptions);
                         } else {
                             driver = new FirefoxDriver(firefoxOptions);
                         }

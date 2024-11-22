@@ -49,85 +49,84 @@ public final class DataBaseConnectionUtils {
      *
      * This variable is initialized when the class is loaded and remains constant throughout the application lifecycle.
      */
-    private static String runmode = "remote";
+    private static String runmode = PropertyUtils.getValue(ConfigProperties.RUNMODE);
 
     static {
         try {
-            switch (runmode.toLowerCase()) {
-                case "local":
-                    try {
-                        String hostName = JsonConfigUtils.get(DataBaseProperties.HOSTNAME);
-                        String port = JsonConfigUtils.get(DataBaseProperties.PORT);
-                        String schema = JsonConfigUtils.get(DataBaseProperties.SCHEMA);
-                        String dbusername = JsonConfigUtils.get(DataBaseProperties.DBUSERNAME);
-                        String password = JsonConfigUtils.get(DataBaseProperties.DBPASSWORD);
-                        String url = "jdbc:mysql://" + hostName + ":" + port + "/" + schema + "?autoReconnect=true&useSSL=false";
-                        myConn = DriverManager.getConnection(url, dbusername, password);
-                        log(INFO, LOG_TAG + ": Connected to MySql database successfully.");
-                    } catch (SQLException e) {
-                        log(ERROR, LOG_TAG + ": Error connecting to MySQL database.");
-                        System.err.println("Error connecting to MySQL database.");
-                        e.printStackTrace();
-                        System.exit(0);
-                        throw new SQLException("Error connecting to MySQL database." + e);
-                    }
-                    break;
-                case "remote":
-                    try {
-                        Class.forName("org.sqlite.JDBC");
-                        String databasePath = FrameworkConstants.getDatabasePath();
-                        String urlRemote = "jdbc:sqlite:" + databasePath;
-                        myConn = DriverManager.getConnection(urlRemote);
-                        log(INFO, LOG_TAG + ": Connected to SQLite database successfully.");
-                    } catch (ClassNotFoundException e) {
-                        log(ERROR, LOG_TAG + ": SQLite JDBC driver not found.");
-                        System.err.println("SQLite JDBC driver not found.");
-                        throw new RuntimeException(e);
-                    } catch (SQLException e) {
-                        log(ERROR, LOG_TAG + ": Error connecting to SQLite database.");
-                        System.err.println("Error connecting to SQLite database.");
-                        e.printStackTrace();
-                        System.exit(0);
-                    }
-                    break;
-                default:
-                    throw new IllegalArgumentException("Invalid run mode: " + runmode);
-            }
+            initializeConnection();
         } catch (Exception e) {
+            log(ERROR, LOG_TAG + ": Error initializing database connection.");
             throw new RuntimeException(e);
         }
     }
 
-    /**
-     * Private constructor to prevent instantiation of the DataBaseConnectionUtils class.
-     * This class provides utility methods to manage database connections.
-     */
     private DataBaseConnectionUtils() {
     }
 
-    /**
-     * Retrieves the active database connection object.
-     *
-     * @return the current Connection object used to interact with the database.
-     */
+    private static void initializeConnection() throws Exception {
+        switch (runmode.toLowerCase()) {
+            case "local":
+                System.out.println("Local MYSQL");
+                connectToMySQL();
+                break;
+            case "remote":
+                connectToSQLite();
+                break;
+            default:
+                throw new IllegalArgumentException("Invalid run mode: " + runmode);
+        }
+    }
+
+    private static void connectToMySQL() throws Exception {
+        Class.forName("com.mysql.cj.jdbc.Driver");
+        String hostName = JsonConfigUtils.get(DataBaseProperties.HOSTNAME);
+        String port = JsonConfigUtils.get(DataBaseProperties.PORT);
+        String schema = JsonConfigUtils.get(DataBaseProperties.SCHEMA);
+        String dbusername = JsonConfigUtils.get(DataBaseProperties.DBUSERNAME);
+        String password = JsonConfigUtils.get(DataBaseProperties.DBPASSWORD);
+        log(INFO, LOG_TAG + ": Connected to MySQL database successfully." + hostName + port + schema + dbusername + password);
+
+        //String url = "jdbc:mysql://" + hostName + ":" + port + "/" + schema + "?autoReconnect=true&useSSL=false";
+        String url = "jdbc:mysql://" + hostName + ":" + port + "/" + schema;
+        log(INFO, LOG_TAG + ": Connected to MySQL database successfully." + url);
+        try {
+            myConn = DriverManager.getConnection(url, dbusername, password);
+            log(INFO, LOG_TAG + ": Connected to MySQL database successfully.");
+        } catch (SQLException e) {
+            log(ERROR, LOG_TAG + ": Error connecting to MySQL database.");
+            throw new SQLException("Error connecting to MySQL database.", e);
+        }
+    }
+
+    private static void connectToSQLite() throws SQLException, ClassNotFoundException {
+        Class.forName("org.sqlite.JDBC");
+        String databasePath = FrameworkConstants.getDatabasePath();
+        String url = "jdbc:sqlite:" + databasePath;
+
+        try {
+            myConn = DriverManager.getConnection(url);
+            log(INFO, LOG_TAG + ": Connected to SQLite database successfully.");
+        } catch (SQLException e) {
+            log(ERROR, LOG_TAG + ": Error connecting to SQLite database.");
+            throw new SQLException("Error connecting to SQLite database.", e);
+        }
+    }
+
     public static Connection getMyConn() {
+        try {
+            if (myConn == null || myConn.isClosed()) {
+                initializeConnection();
+            }
+        } catch (SQLException | ClassNotFoundException e) {
+            log(ERROR, LOG_TAG + ": Error obtaining database connection.");
+            e.printStackTrace();
+            return null;
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
         return myConn;
     }
 
-    /**
-     * Closes the current database connection if it is not already closed.
-     *
-     * This method checks if the database connection `myConn` is not null.
-     * If the connection is valid, it attempts to close it while logging the action.
-     * Upon successful closure, an informational log message is recorded.
-     * If an SQLException occurs during the closure process, an error log message
-     * is recorded and a custom `BaseException` is thrown with details about the error.
-     *
-     * The method ensures proper resource management by closing the database connection
-     * and logging the process for audit purposes.
-     *
-     * @throws BaseException if there is an error closing the database connection
-     */
     public static void closeConnection() {
         if (myConn != null) {
             try {
@@ -139,4 +138,5 @@ public final class DataBaseConnectionUtils {
             }
         }
     }
+
 }
