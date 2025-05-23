@@ -24,42 +24,88 @@ import static org.gcit.enums.ConfigProperties.RUNMODE;
 import static org.gcit.utils.PropertyUtils.getValue;
 
 /**
- * Utility class to provide a WebDriver instance based on the specified browser type.
- * It supports Chrome, Firefox, and Edge browsers and can initialize drivers for both
- * local and remote execution environments as defined by the configuration properties.
+ * A factory class responsible for creating and configuring {@link org.openqa.selenium.WebDriver}
+ * instances for different browsers (Chrome, Firefox, Edge).
+ * <p>
+ * This class determines whether to create a local WebDriver instance or a
+ * {@link org.openqa.selenium.remote.RemoteWebDriver} based on the {@code RUNMODE}
+ * configuration property (retrieved via {@link org.gcit.utils.PropertyUtils}).
+ * If "remote", it uses the {@code SELENIUMGRIDADDRESS} property for the RemoteWebDriver URL.
+ * <p>
+ * It applies various browser-specific configurations, including:
+ * <ul>
+ *   <li>Headless mode (if {@code BROWSERHEADLESSMODE} property is "Yes").</li>
+ *   <li>Arguments to start maximized, disable GPU, disable DevShmUsage, etc.</li>
+ *   <li>Experimental options (e.g., excluding "disable-popup-blocking" switch for Chrome/Edge).</li>
+ *   <li>Specific Firefox profile settings for certificates and page load strategy.</li>
+ * </ul>
+ * The created WebDriver instance is typically then managed by {@link org.gcit.driver.DriverManager}.
+ * This class is final and cannot be instantiated.
  *
- * Initialization settings include options for headless mode, window size adjustments,
- * and various browser-specific configurations to ensure optimal test execution.
+ * @see org.openqa.selenium.WebDriver
+ * @see org.openqa.selenium.chrome.ChromeDriver
+ * @see org.openqa.selenium.firefox.FirefoxDriver
+ * @see org.openqa.selenium.edge.EdgeDriver
+ * @see org.openqa.selenium.remote.RemoteWebDriver
+ * @see org.gcit.utils.PropertyUtils
+ * @see org.gcit.enums.ConfigProperties
+ * @see org.gcit.driver.DriverManager
  */
 public final class DriverSupplier {
 
     /**
-     * A constant representing the log tag for the DriverSupplier class.
-     * This is used for identifying the source of log messages specific to DriverSupplier.
+     * Logger tag for this class, using its simple name.
      */
     private static final String LOG_TAG = DriverSupplier.class.getSimpleName();
 
     /**
-     * Private constructor to prevent instantiation of the DriverSupplier class.
-     * This class provides utility methods to supply WebDriver instances based on the provided browser type.
+     * Private constructor to prevent instantiation of this factory class.
      */
     private DriverSupplier() {
     }
 
     /**
-     * Initializes and returns a WebDriver instance based on the specified browser type.
-     * The method configures the WebDriver options for Chrome, Edge, and Firefox
-     * to support both local and remote execution modes.
+     * Creates and returns a {@link WebDriver} instance configured for the specified browser
+     * and execution mode (local or remote).
+     * <p>
+     * This method first checks if a driver is already initialized for the current thread via
+     * {@link DriverManager#getDriver()}. If so, it throws a {@link RuntimeException} to prevent
+     * re-initialization.
+     * <p>
+     * Based on the {@code browser} parameter (case-insensitive "chrome", "edge", or "firefox")
+     * and the {@code RUNMODE} configuration property:
+     * <ul>
+     *   <li><b>Local Execution:</b> Instantiates a local {@link ChromeDriver}, {@link EdgeDriver}, or {@link FirefoxDriver}
+     *       with appropriate {@link ChromeOptions}, {@link EdgeOptions}, or {@link FirefoxOptions}.</li>
+     *   <li><b>Remote Execution:</b> Instantiates a {@link RemoteWebDriver} pointing to the URL specified
+     *       by the {@code SELENIUMGRIDADDRESS} property, using the browser-specific options.</li>
+     * </ul>
+     * Common configurations applied (where applicable):
+     * <ul>
+     *   <li>Headless mode if {@code BROWSERHEADLESSMODE} is "Yes".</li>
+     *   <li>Arguments: {@code --start-maximized}, {@code --disable-dev-shm-usage}, {@code --disable-gpu}.</li>
+     *   <li>Chrome/Edge: Excludes "disable-popup-blocking" switch.</li>
+     *   <li>Firefox: Additional arguments (e.g., {@code --disable-web-security}) and profile settings
+     *       (e.g., accepting untrusted certificates).</li>
+     * </ul>
+     * After successful instantiation, the browser window is set to a default size of 1920x1080.
      *
-     * @param browser the name of the browser for which the WebDriver is to be initialized.
-     *                Supported values are "chrome", "edge", and "firefox".
-     * @return the initialized WebDriver instance.
-     * @throws MalformedURLException if the URL for the remote WebDriver is malformed.
-     * @throws RuntimeException if the browser type is unsupported or if there is an error initializing the WebDriver.
+     * @param browser The name of the browser for which to create a WebDriver instance
+     *                (case-insensitive "chrome", "edge", or "firefox").
+     * @return A configured {@link WebDriver} instance for the specified browser and run mode.
+     * @throws MalformedURLException If {@code RUNMODE} is "remote" and the {@code SELENIUMGRIDADDRESS}
+     *                               property provides a malformed URL for the Selenium Grid.
+     * @throws RuntimeException If the specified {@code browser} is unsupported, if a driver is already
+     *                          initialized for the current thread, or if any other error occurs during
+     *                          WebDriver initialization (wrapping the original exception).
+     * @see ConfigProperties#RUNMODE
+     * @see ConfigProperties#BROWSERHEADLESSMODE
+     * @see ConfigProperties#SELENIUMGRIDADDRESS
+     * @see DriverManager#getDriver()
      */
     public static WebDriver getWebDriver(String browser) throws MalformedURLException {
-        WebDriver driver = null;
-        String runMode = getValue(RUNMODE);
+        WebDriver driver = null; // Initialize to null
+        String runMode = getValue(RUNMODE); // Fetches "local" or "remote"
 //        String runMode = "local";
 
         if (Objects.isNull(DriverManager.getDriver())) {

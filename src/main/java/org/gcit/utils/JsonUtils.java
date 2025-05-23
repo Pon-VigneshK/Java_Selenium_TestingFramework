@@ -4,7 +4,10 @@ import com.fasterxml.jackson.core.JsonGenerationException;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.JsonMappingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.gcit.constants.FrameworkConstants;
+import org.gcit.enums.ConfigProperties;
+import org.gcit.enums.LogType;
 import org.gcit.exceptions.InvalidFilepathException;
 import org.gcit.exceptions.JsonExceptions;
 import org.gcit.exceptions.SQLConnectionException;
@@ -19,99 +22,138 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.*;
 
+import static org.gcit.logger.LogService.log;
 import static org.gcit.utils.DataBaseConnectionUtils.closeConnection;
 import static org.gcit.utils.DataBaseConnectionUtils.getMyConn;
 
 /**
- * Utility class for handling JSON data related to test cases and runner lists.
+ * Utility class for handling JSON data, including reading and writing JSON files for test configurations,
+ * test data, and runner lists. It supports operations like generating JSON from Excel or databases,
+ * and parsing JSON to provide data for test execution.
+ * <p>
+ * This class uses Jackson ObjectMapper for JSON processing and interacts with other utility classes
+ * like {@link FrameworkConstants}, {@link ExcelUtils}, and {@link DataBaseConnectionUtils}.
+ * <p>
+ * Note: Several static fields in this class (e.g., {@code finalDatalist}, {@code queriesList}) are mutable
+ * and can retain state across method calls. This behavior should be considered, especially if methods
+ * are called multiple times within the same test execution lifecycle, as data might accumulate or be
+ * unintentionally shared. It is generally recommended to make such fields method-local or provide
+ * clear mechanisms for reset if shared state is not desired. For the purpose of this documentation,
+ * warnings are added to such fields.
  */
 @SuppressWarnings({"unchecked", "rawtypes"})
 public final class JsonUtils {
     /**
-     * A list of maps where each map represents a test case with its associated details.
-     * Each map contains key-value pairs representing the properties and values of a specific test case.
-     * This list is used to store finalized test cases, typically derived from initial data transformation or processing.
+     * A static list of maps, potentially used to store aggregated test case details.
+     * <strong>Warning:</strong> Being static, it can accumulate data across different method calls if not explicitly cleared.
+     * Its usage seems to be primarily within older or less-used parts of the class. It's advisable to refactor
+     * its usage to method-local variables or ensure explicit state management if retained.
+     * @deprecated Consider replacing with method-local variables or more controlled state management.
      */
+    @Deprecated
     private static List<Map<String, Object>> finaltestcaselist = new ArrayList();
+
     /**
-     * A static HashMap that stores query details.
-     * The key is a String representing the type or name of the query.
-     * The value is an Object that holds the query data or information.
+     * A static map to cache SQL query details fetched by {@link #getQueryDetails(String)}.
+     * The key is a query type (e.g., "selectqueries"), and the value is a map of query names to query strings.
+     * <strong>Note:</strong> This field is updated as a side effect of calling {@link #getQueryDetails(String)}.
+     * Subsequent calls to {@link #getQueryDetails(String)} with the same query type might return this cached map
+     * depending on its implementation details.
      */
     private static HashMap<String, Object> queriesList = new HashMap();
+
     /**
-     * A FileInputStream used for reading data from a file.
-     * This stream is used in various methods to handle JSON and Excel data operations.
+     * A static field for FileInputStream.
+     * <strong>Warning:</strong> This field is class-static and was previously shared across method calls
+     * (e.g., in {@code getTestDataDetails}, {@code getQueryDetails}). This is a problematic pattern as it can lead
+     * to resource leaks if the stream is not closed properly in one method before being potentially reassigned
+     * in another, or if methods are called concurrently.
+     * It is highly recommended to make FileInputStream instances method-local using try-with-resources.
+     * Javadoc for methods that previously used this will assume it's made method-local or properly managed.
+     * For the purpose of this refactoring, new uses should be method-local.
+     * @deprecated This field should not be used directly. Streams should be method-local.
      */
-    private static FileInputStream fileInputStream;
+    @Deprecated
+    private static FileInputStream fileInputStream; // Should be method-local
+
     /**
-     * A nested LinkedHashMap structure to store test data.
-     * The outermost LinkedHashMap uses a String key to map to another LinkedHashMap.
-     * The second LinkedHashMap uses a String key to map to an ArrayList of HashMaps.
-     * Each HashMap in the ArrayList contains test data with String keys and Object values.
-     * This structure is typically used to store and organize test data fetched from an Excel sheet or other data sources.
+     * Stores structured test data, typically generated by {@link #generateTestDataJson()}.
+     * The outer map's key is the environment name (e.g., "QA").
+     * The inner {@code LinkedHashMap} maps a query key (or data category) to a list of test data rows
+     * (each row is a {@code HashMap<String, Object>}).
+     * This field is populated by {@link #generateTestDataJson()} and its content is written to a JSON file.
+     * <strong>Note:</strong> This is a static field and is cleared and repopulated by {@link #generateTestDataJson()}.
      */
     private static LinkedHashMap<String,
             LinkedHashMap<String, ArrayList<HashMap<String, Object>>>>
             testDataHashMap = new LinkedHashMap();
+
     /**
-     * The `envName` variable holds the name of the environment to be used during runtime.
-     * This variable is set statically and accessed by various methods within the `JsonUtils` class
-     * to determine the context for data retrieval and processing.
+     * Holds the name of the current environment being processed (e.g. "qa", "dev") as read from a data source (like a DB column).
+     * This variable is set internally by methods like {@link #generateTestDataJson()} during data filtering.
+     * It is distinct from {@link #runEnv} which is the target execution environment.
      */
-    private static String envName;
+    private static String envName; // Internal state for environment name from data
+
     /**
-     * Specifies the runtime environment in which the application is currently operating.
-     * This could be set to various environment types such as "development", "testing", "production", etc.
+     * Holds the target runtime environment string (e.g., "qa", "dev") fetched from configuration properties.
+     * Used by methods like {@link #generateTestDataJson()} to filter or select data relevant
+     * to the current execution environment defined in the application's configuration.
      */
-    private static String runEnv;
+    private static String runEnv; // Target runtime environment from config
+
     /**
-     * A list of maps holding the final data processed by the utility functions.
-     * Each map represents a data entry where keys are string identifiers and values are their corresponding objects.
-     * This list is intended to aggregate processed data for further operations or analysis within the application.
+     * A static list used to accumulate test data details, primarily by the {@link #getTestDataDetails()} method.
+     * Each map in the list represents a single test data record (e.g., a row from a JSON structure).
+     * <p>
+     * <strong>Warning:</strong> This is a static field. The {@link #getTestDataDetails()} method now includes
+     * {@code finalDatalist.clear()} at its beginning to prevent accumulation across unrelated calls, making its
+     * behavior more predictable for typical data provider scenarios.
      */
     private static List<Map<String, Object>> finalDatalist = new ArrayList<>();
+
     /**
-     * A LinkedHashMap that holds structured JSON test data.
-     * The outer map uses keys as String values to represent different test cases or categories.
-     * Each value in the outer map is an ArrayList of HashMaps where each HashMap holds various key-value pairs representing test data details.
-     * This structure allows for ordered storage and retrieval of complex nested test data.
+     * A temporary map used in {@link #generateTestDataJson()} to aggregate data for the current environment
+     * before it's put into {@link #testDataHashMap}.
+     * The key is typically a query identifier (e.g., "UserQueries"), and the value is a list of data rows (maps)
+     * from that query that match the current {@link #runEnv}.
+     * This field is cleared by {@link #generateTestDataJson()} before use.
      */
     private static LinkedHashMap<String, ArrayList<HashMap<String, Object>>>
-            finalMap = new LinkedHashMap();
+            finalMap = new LinkedHashMap(); // Temporary aggregator for generateTestDataJson
+
     /**
-     * A map representing the final list of test cases to be executed.
-     * Each key is a string representing a category or identifier for a set of test cases.
-     * The value is an array list containing maps, where each map holds the details of a specific test case.
+     * Used in {@link #generateRunnerListJsonData()} to store the structured list of test cases
+     * (mapping a queryKey/category to a list of test case maps) before it's wrapped by {@link #testRunnerHashMap}
+     * for JSON output. This field is cleared by {@link #generateRunnerListJsonData()} before use.
      */
-    // test case runner list map
     private static LinkedHashMap<String, ArrayList<HashMap<String, Object>>>
-            finalTestList = new LinkedHashMap();
+            finalTestList = new LinkedHashMap(); // Aggregator for generateRunnerListJsonData
+
     /**
-     * A static LinkedHashMap used within the JsonUtils class to manage hierarchical test runner data.
-     * The structure is as follows:
-     * - The first level key is a String representing a high-level category or identifier.
-     * - The second level is another LinkedHashMap where its key is a String corresponding to a subcategory or more detailed identifier.
-     * - The second level value is an ArrayList containing HashMaps, each HashMap holding test runner details where keys are Strings and values are Objects.
+     * Top-level map for generating the runner list JSON file (e.g., {@code runmanager.json}).
+     * Typically, it will contain one key (e.g., "RunManager" from {@link FrameworkConstants#getRunmanager()})
+     * which maps to the content of {@link #finalTestList}.
+     * Used by {@link #generateRunnerListJsonData()} and {@link #generateRunnerListJsonDataFromExcel(String)}.
+     * This field is cleared by {@link #generateRunnerListJsonData()} before use.
      */
     private static LinkedHashMap<String,
             LinkedHashMap<String, ArrayList<HashMap<String, Object>>>>
             testRunnerHashMap = new LinkedHashMap();
 
     /**
-     * Private constructor to prevent instantiation of the JsonUtils utility class.
+     * Private constructor to prevent instantiation of this utility class.
      * This class is designed to provide static methods for JSON related operations.
      */
     private JsonUtils() {
     }
 
     /**
-     * Retrieves the test data stored in a nested LinkedHashMap structure.
+     * Retrieves the main static map ({@link #testDataHashMap}) that stores test data generated by {@link #generateTestDataJson()}.
+     * This map is structured as: {@code <EnvironmentName, <QueryKey, List<TestDataRowMap>>>}.
      *
-     * @return A nested LinkedHashMap containing the test data.
-     *         The outermost LinkedHashMap uses strings as keys, where each key corresponds to a high-level test category.
-     *         The value associated with each key is another LinkedHashMap, where keys are mid-level test identifiers.
-     *         The value associated with each mid-level key is an ArrayList of HashMaps, where each HashMap stores individual test data points.
+     * @return The static {@link #testDataHashMap} instance.
+     * @see #generateTestDataJson()
      */
     public static LinkedHashMap<String,
             LinkedHashMap<String, ArrayList<HashMap<String, Object>>>>
@@ -120,85 +162,241 @@ public final class JsonUtils {
     }
 
     /**
-     * Generates a JSON file containing runner list data extracted from an Excel sheet.
-     * The data is read from the specified sheet in the Excel file, converted into a list of maps,
-     * and then written to a JSON file with a predefined structure.
+     * Generates a JSON file (typically {@code runmanager.json}) containing a list of test cases
+     * to be executed, based on data extracted from a specified Excel sheet.
+     * <p>
+     * The method reads test details (expected to be test case definitions) from the given
+     * {@code sheetName} in the Excel file (path from {@link FrameworkConstants#getExcelFilePath()})
+     * using {@link ExcelUtils#getTestDetails(String)}.
+     * <p>
+     * The extracted data is then structured into a JSON format like:
+     * <pre>
+     * {
+     *   "RunManager": {  // Key from FrameworkConstants.getRunmanager()
+     *     "testCaseLists": [ // Key from FrameworkConstants.getTestcaselist()
+     *       { "testcasename": "TC001", "execute": "yes", ... },
+     *       { "testcasename": "TC002", "execute": "no", ... }
+     *     ]
+     *   }
+     * }
+     * </pre>
+     * The generated JSON is written to the file specified by {@link FrameworkConstants#getTestCaseJsonPath()}.
      *
-     * @param sheetName the name of the Excel sheet from which to extract the runner list data
+     * @param sheetName The name of the Excel sheet from which to extract the runner list data.
+     *                  This sheet should typically contain columns like "testcasename" and "execute".
+     * @throws JsonExceptions if an {@link IOException} occurs during JSON file writing or if
+     *                        {@link ExcelUtils#getTestDetails(String)} fails and throws an exception.
+     * @see ExcelUtils#getTestDetails(String)
+     * @see FrameworkConstants#getRunmanager()
+     * @see FrameworkConstants#getTestcaselist()
+     * @see FrameworkConstants#getTestCaseJsonPath()
      */
     public static void generateRunnerListJsonDataFromExcel(String sheetName) {
         try {
             List<Map<String, String>> testDataList =
                     ExcelUtils.getTestDetails(sheetName);
-            String testCaseListName = "testCaseLists";
-            Map<String, Object> finalTestList = new HashMap<>();
-            finalTestList.put(testCaseListName, testDataList);
-            HashMap<String, Map<String, Object>> testRunnerHashMap = new HashMap<>();
-            testRunnerHashMap.put(FrameworkConstants.getRunmanager(), finalTestList);
+            String testCaseListNameKey = FrameworkConstants.getTestcaselist(); // Use constant for clarity
+            Map<String, Object> innerJsonMap = new HashMap<>();
+            innerJsonMap.put(testCaseListNameKey, testDataList);
+
+            HashMap<String, Map<String, Object>> outerJsonMap = new HashMap<>();
+            outerJsonMap.put(FrameworkConstants.getRunmanager(), innerJsonMap);
+
             ObjectMapper mapper = new ObjectMapper();
+            String outputPath = FrameworkConstants.getTestCaseJsonPath();
             mapper.writerWithDefaultPrettyPrinter().writeValue(
-                    new File(FrameworkConstants.getTestCaseJsonPath()),
-                    testRunnerHashMap);
+                    new File(outputPath),
+                    outerJsonMap);
+            log(LogType.INFO, "Runner list JSON generated successfully from Excel sheet '" + sheetName + "' at: " + outputPath);
         } catch (IOException e) {
-            throw new RuntimeException(e);
+            log(LogType.ERROR, "Failed to generate runner list JSON from Excel sheet: " + sheetName, e);
+            throw new JsonExceptions("Failed to generate runner list JSON from Excel sheet: " + sheetName, e);
         }
     }
 
     /**
-     * Retrieves test details from a JSON file based on the provided high-level key name.
+     * Retrieves a list of test case definitions from the main test execution configuration JSON file
+     * (e.g., {@code runmanager.json}, path from {@link FrameworkConstants#getTestCaseJsonPath()}).
+     * <p>
+     * The method expects the JSON file to have a structure where the {@code highLevelKeyName}
+     * (typically "RunManager" from {@link FrameworkConstants#getRunmanager()}) maps to an object.
+     * This object, in turn, contains one or more lists of test cases (e.g., a list under a key like "smokeTests"
+     * and another under "regressionTests"). This method aggregates all test cases from all such lists found
+     * under the {@code highLevelKeyName}.
+     * <p>
+     * Example JSON structure:
+     * <pre>
+     * {
+     *   "RunManager": {  // highLevelKeyName
+     *     "smokeTests": [
+     *       { "testcasename": "LoginTest", "execute": "yes", ... }
+     *     ],
+     *     "regressionTests": [
+     *       { "testcasename": "SearchTest", "execute": "yes", ... }
+     *     ]
+     *   }
+     * }
+     * </pre>
+     * If {@code highLevelKeyName} is "RunManager", this method would return a list containing
+     * maps for "LoginTest" and "SearchTest".
      *
-     * @param highLevelKeyName The key name in the JSON file to look for test details.
-     * @return A list of test details where each detail is represented as a map.
+     * @param highLevelKeyName The primary key in the JSON file (e.g., "RunManager") under which test case lists are defined.
+     * @return A {@code List<Map<String, Object>>} containing all test case maps aggregated from the specified structure.
+     *         Returns an empty list if the {@code highLevelKeyName} is not found, or if no test cases are defined under it.
+     * @throws InvalidFilepathException if the test case JSON file is not found.
+     * @throws JsonExceptions if there is an error parsing the JSON file or an I/O error occurs.
+     * @see FrameworkConstants#getTestCaseJsonPath()
+     * @see FrameworkConstants#getRunmanager()
      */
     public static List<Map<String, Object>> getTestDetails(
             String highLevelKeyName) {
         List<Map<String, Object>> testDetailsList = new ArrayList<>();
-        FileInputStream fileInputStream = null;
-
-        try {
+        // FileInputStream is now method-local and managed by try-with-resources
+        try (FileInputStream localFileInputStream = new FileInputStream(FrameworkConstants.getTestCaseJsonPath())) {
             ObjectMapper objectMapper = new ObjectMapper();
             objectMapper.configure(
                     DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
 
-            fileInputStream =
-                    new FileInputStream(FrameworkConstants.getTestCaseJsonPath());
-            HashMap<String, HashMap> testCaseMap =
-                    objectMapper.readValue(fileInputStream, HashMap.class);
-            HashMap<String, ArrayList<Map<String, Object>>> jsonTestCaseList =
-                    (HashMap<String, ArrayList<Map<String, Object>>>) testCaseMap.get(
-                            highLevelKeyName);
-            for (Map.Entry<String, ArrayList<Map<String, Object>>> testCase :
-                    jsonTestCaseList.entrySet()) {
-                for (Map<String, Object> cases : testCase.getValue())
-                    testDetailsList.add(cases);
+            // Define expected structure more precisely for TypeReference
+            // Assumes the structure is Map<String, Map<String, List<Map<String, Object>>>>
+            // e.g. {"RunManager": {"testCaseGroup1": [tcMap1, tcMap2], "testCaseGroup2": [...]}}
+            TypeReference<HashMap<String, HashMap<String, ArrayList<Map<String, Object>>>>> typeRef =
+                    new TypeReference<HashMap<String, HashMap<String, ArrayList<Map<String, Object>>>>>() {};
+            HashMap<String, HashMap<String, ArrayList<Map<String, Object>>>> rootJsonMap =
+                    objectMapper.readValue(localFileInputStream, typeRef);
+
+            HashMap<String, ArrayList<Map<String, Object>>> testCaseGroupsMap = rootJsonMap.get(highLevelKeyName);
+
+            if (testCaseGroupsMap != null) {
+                for (ArrayList<Map<String, Object>> groupOfTestCases : testCaseGroupsMap.values()) {
+                    if (groupOfTestCases != null) {
+                        testDetailsList.addAll(groupOfTestCases);
+                    }
+                }
+            } else {
+                log(LogType.WARN, "High-level key '" + highLevelKeyName + "' not found in " + FrameworkConstants.getTestCaseJsonPath());
             }
         } catch (FileNotFoundException e) {
-            throw new InvalidFilepathException("Test case run list JSON file not found in the given path. Please check your path:" + FrameworkConstants.getTestCaseJsonPath());
-        } catch (Exception e) {
-            e.printStackTrace();
-        } finally {
-            if (Objects.nonNull(fileInputStream)) {
-                try {
-                    fileInputStream.close();
-                } catch (IOException e) {
-                    e.printStackTrace();
-                }
-            }
+            throw new InvalidFilepathException("Test case run list JSON file not found at: " + FrameworkConstants.getTestCaseJsonPath(), e);
+        } catch (IOException e) { // Catch specific IOException from readValue or FileInputStream operations
+            log(LogType.ERROR, "I/O error processing test case JSON file: " + FrameworkConstants.getTestCaseJsonPath(), e);
+            throw new JsonExceptions("I/O error processing test case JSON file: " + FrameworkConstants.getTestCaseJsonPath(), e);
+        } catch (Exception e) { // Catch other potential runtime exceptions from Jackson parsing (e.g., JsonParseException)
+            log(LogType.ERROR, "Error parsing test case JSON file: " + FrameworkConstants.getTestCaseJsonPath(), e);
+            throw new JsonExceptions("Error parsing test case JSON file: " + FrameworkConstants.getTestCaseJsonPath(), e);
         }
         return testDetailsList;
     }
 
     /**
-     * Reads JSON test data from a file and returns a list of maps containing the test data details.
-     * The JSON file path and environment are determined using framework constants.
+     * Retrieves test data details from an environment-specific JSON file, typically used for manually crafted or externally provided JSON test data.
+     * <p>
+     * This method reads a JSON file whose path is dynamically constructed based on the current runtime environment
+     * (fetched via {@link PropertyUtils#getValue(ConfigProperties)} with key {@link ConfigProperties#ENV}).
+     * For example, if the environment is "QA", it attempts to read a file like "QA_TestData.json" using the base path from
+     * {@link FrameworkConstants#getTestDataJsonFilePath(String)}.
+     * <p>
+     * The expected JSON structure is a root map where the key is the environment string (e.g., "QA").
+     * The value associated with this environment key should be another map (a "category map").
+     * Each value within this category map is expected to be a list of test data entries ({@code List<Map<String, Object>>}).
+     * The method aggregates all such lists found under the current environment's category map.
+     * <p>
+     * Example JSON structure for "QA" environment:
+     * <pre>
+     * {
+     *   "QA": {
+     *     "LoginTests": [
+     *       { "user": "admin", "pass": "secret" }, ...
+     *     ],
+     *     "SearchTests": [
+     *       { "query": "test", "expectedResults": 5 }, ...
+     *     ]
+     *   },
+     *   "DEV": { ... }
+     * }
+     * </pre>
+     * If current environment is "QA", this method would collect all maps from "LoginTests" and "SearchTests" lists.
+     * <p>
+     * It configures the {@link ObjectMapper} to ignore unknown properties. This method is primarily invoked by
+     * {@link DataProviderUtils} when the data source configuration ({@code ConfigProperties.DATASOURCE}) is set to "json".
      *
-     * The method reads the JSON file, configures the ObjectMapper to ignore unknown properties during deserialization,
-     * and processes the retrieved data to construct the final list of test data maps. If the file is not found or
-     * there is an error reading the file, appropriate exceptions are thrown.
+     * @return A {@code List<Map<String, Object>>}, where each map represents a single test data record.
+     *         Returns an empty list if the file is not found, the specific environment key is missing,
+     *         or if the data structure doesn't yield any test data lists.
+     * @throws InvalidFilepathException if the constructed path to the JSON test data file is incorrect or the file is not found.
+     * @throws JsonExceptions if there's an error reading or parsing the JSON file.
+     * @see #getTestDataDetails() for reading JSON files typically generated by {@link #generateTestDataJson()}.
+     * @see org.gcit.utils.DataProviderUtils
+     * @see FrameworkConstants#getTestDataJsonFilePath(String)
+     * @see PropertyUtils#getValue(ConfigProperties)
+     */
+    public static List<Map<String, Object>> getJsonTestDataDetails() {
+        List<Map<String, Object>> collectedDataList = new ArrayList<>(); // Use local variable
+        String environment = PropertyUtils.getValue(ConfigProperties.ENV);
+        String filePath = FrameworkConstants.getTestDataJsonFilePath(environment);
+
+        // FileInputStream is now method-local and managed by try-with-resources
+        try (FileInputStream localFileInputStream = new FileInputStream(filePath)) {
+            ObjectMapper objectMapper = new ObjectMapper();
+            objectMapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
+
+            // Define the expected structure for TypeReference
+            // Root: Map<EnvName, Map<CategoryName, List<TestDataRowMap>>>
+            TypeReference<Map<String, Map<String, List<Map<String, Object>>>>> typeRef =
+                    new TypeReference<Map<String, Map<String, List<Map<String, Object>>>>>() {};
+            Map<String, Map<String, List<Map<String, Object>>>> allEnvironmentsData =
+                    objectMapper.readValue(localFileInputStream, typeRef);
+
+            Map<String, List<Map<String, Object>>> currentEnvironmentCategoryMap = allEnvironmentsData.get(environment);
+
+            if (currentEnvironmentCategoryMap != null) {
+                for (List<Map<String, Object>> categoryDataList : currentEnvironmentCategoryMap.values()) {
+                    if (categoryDataList != null) {
+                        collectedDataList.addAll(categoryDataList);
+                    }
+                }
+            } else {
+                log(LogType.WARN, "No data found for environment: " + environment + " in file: " + filePath +
+                                  ". Check if the JSON file contains a top-level key matching the environment string.");
+            }
+        } catch (FileNotFoundException e) {
+            throw new InvalidFilepathException("Test data JSON file not found for environment " + environment + ". Path: " + filePath, e);
+        } catch (IOException e) { // Catch specific IOException
+            log(LogType.ERROR, "I/O error reading or parsing JSON test data file: " + filePath, e);
+            throw new JsonExceptions("I/O error reading or parsing JSON test data file: " + filePath, e);
+        } catch (Exception e) { // Catch other potential runtime exceptions (e.g., from Jackson mapping)
+            log(LogType.ERROR, "Unexpected error occurred while getting JSON test data details from: " + filePath, e);
+            throw new JsonExceptions("Unexpected error occurred while getting JSON test data details from: " + filePath, e);
+        }
+        return collectedDataList;
+    }
+
+    /**
+     * Retrieves test data details from an environment-specific JSON file, typically one generated by {@link #generateTestDataJson()} from a database.
+     * <p>
+     * This method reads a JSON file whose path is dynamically constructed based on the current runtime environment
+     * (fetched via {@link PropertyUtils#getValue(ConfigProperties)}). For example, if the environment is "QA",
+     * it might attempt to read "QA_TestData.json" from the path specified by {@link FrameworkConstants#getTestDataJsonFilePath(String)}.
+     * <p>
+     * The expected JSON structure is a root map, with a top-level key matching the current environment string (e.g., "QA").
+     * The value associated with this environment key should be another map. Each value within this inner map is expected
+     * to be a list of test data entries ({@code List<Map<String, Object>>}). The method aggregates all such lists found
+     * under the current environment's inner map.
+     * <p>
+     * It configures the {@link ObjectMapper} to ignore unknown properties, providing flexibility in the JSON data.
+     * This method is primarily invoked by {@link DataProviderUtils} when the data source configuration
+     * ({@code ConfigProperties.DATASOURCE}) is set to "json".
      *
-     * @return A list of maps where each map contains the details of the test data.
-     * @throws InvalidFilepathException if the JSON file is not found in the specified path.
-     * @throws RuntimeException if there is an error reading the JSON file or processing the data.
+     * @return A {@code List<Map<String, Object>>}, where each map represents a single test data record (e.g., a test case
+     *         with its parameters). Returns an empty list if the file is not found (though an exception is more likely)
+     *         or if the specific environment's data structure doesn't yield any lists.
+     * @throws InvalidFilepathException if the constructed path to the JSON test data file is incorrect or the file is not found.
+     * @throws RuntimeException if there's an error reading the JSON file, if the data for the current environment is missing,
+     *                          or if there's an issue during JSON parsing.
+     * @see #getTestDataDetails() for reading JSON files typically generated by {@link #generateTestDataJson()}.
+     * @see org.gcit.utils.DataProviderUtils#getDataProvider(java.lang.reflect.Method)
+     * @see FrameworkConstants#getTestDataJsonFilePath(String)
+     * @see PropertyUtils#getValue(ConfigProperties)
      */
     public static List<Map<String, Object>> getJsonTestDataDetails() {
         List<Map<String, Object>> finalDataList = new ArrayList<>();
@@ -208,10 +406,12 @@ public final class JsonUtils {
             ObjectMapper objectMapper = new ObjectMapper();
             objectMapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
 
-            fileInputStream = new FileInputStream(FrameworkConstants.getTestDataJsonFilePath(FrameworkConstants.getEnvironment()));
+            // Use PropertyUtils to get ENV directly
+            String environment = PropertyUtils.getValue(ConfigProperties.ENV);
+            fileInputStream = new FileInputStream(FrameworkConstants.getTestDataJsonFilePath(environment));
             Map<String, Map<String, Object>> jsonTestDataMap = objectMapper.readValue(fileInputStream, Map.class);
 
-            Map<String, Object> jsonTestDataLinkedMap = jsonTestDataMap.get(FrameworkConstants.getEnvironment());
+            Map<String, Object> jsonTestDataLinkedMap = jsonTestDataMap.get(environment);
 
             if (jsonTestDataLinkedMap != null) {
                 for (Map.Entry<String, Object> entry : jsonTestDataLinkedMap.entrySet()) {
@@ -222,11 +422,12 @@ public final class JsonUtils {
                     }
                 }
             } else {
-                throw new RuntimeException("No data found for environment: " + FrameworkConstants.getEnvironment());
+                throw new RuntimeException("No data found for environment: " + PropertyUtils.getValue(ConfigProperties.ENV));
             }
 
         } catch (FileNotFoundException e) {
-            throw new InvalidFilepathException("Test data JSON file not found in the given path. Please check your path: " + FrameworkConstants.getTestDataJsonFilePath(), e);
+            // Updated to use the version of getTestDataJsonFilePath that takes an environment argument
+            throw new InvalidFilepathException("Test data JSON file not found in the given path. Please check your path: " + FrameworkConstants.getTestDataJsonFilePath(PropertyUtils.getValue(ConfigProperties.ENV)), e);
         } catch (IOException e) {
             throw new RuntimeException("Error reading JSON file: " + e.getMessage(), e);
         } finally {
@@ -234,7 +435,7 @@ public final class JsonUtils {
                 try {
                     fileInputStream.close();
                 } catch (IOException e) {
-                    e.printStackTrace(); // Handle or log this exception properly
+                    log(LogType.ERROR, "Error closing file input stream for test data JSON", e);
                 }
             }
         }
@@ -247,151 +448,429 @@ public final class JsonUtils {
      * The method deserializes the JSON file into a structure
      * comprising a list of maps, where each map represents a test data item.
      *
-     * @return a list of maps, each containing test data details.
+     * @return a list of maps, each containing test data details. The list is a static field and will accumulate
+     *         data if this method is called multiple times without clearing {@code finalDatalist}.
      * @throws InvalidFilepathException if the JSON file is not found at the specified path.
+     * @throws JsonExceptions if there is an error parsing the JSON content or if the expected structure is not met.
+     */
+    /**
+     * <p>
+     * This method reads a JSON file whose path is determined by {@link FrameworkConstants#getTestDataJsonFilePath()} (no-argument version),
+     * which internally resolves to an environment-specific path (e.g., "QA_TestData.json") based on the current configuration
+     * fetched via {@link PropertyUtils#getValue(ConfigProperties)} with key {@link ConfigProperties#ENV}.
+     * <p>
+     * The expected JSON structure is a root map. A key in this root map should match the current environment string (e.g., "QA").
+     * The value associated with this environment key must be a {@code LinkedHashMap}. The method then iterates through the
+     * <em>values</em> of this {@code LinkedHashMap}; each of these values is expected to be an {@code ArrayList} of
+     * {@code HashMap<String, Object>} representing test data records. All such records are aggregated.
+     * <p>
+     * It configures the {@link ObjectMapper} to ignore unknown properties. This method is primarily used by
+     * {@link DataProviderUtils} when the data source ({@code ConfigProperties.DATASOURCE}) is configured as "db".
+     * In this scenario, {@link #generateTestDataJson()} would have previously run to create or update the JSON file
+     * from the database, and this method then reads that generated file.
+     * <p>
+     * The expected JSON structure is a root map. A key in this root map should match the current environment string (e.g., "QA").
+     * The value associated with this environment key must be a {@code LinkedHashMap} (the "query map").
+     * The method then iterates through the <em>values</em> of this query map; each of these values is expected to be an
+     * {@code ArrayList} of {@code HashMap<String, Object>} representing test data records (rows for a query). All such records are aggregated.
+     * <p>
+     * Example JSON structure (if current ENV is "QA" and it was generated from queries "UserQueries" and "ProductQueries"):
+     * <pre>
+     * {
+     *   "QA": {
+     *     "UserQueries": [
+     *       { "id": 1, "username": "admin" }, ...
+     *     ],
+     *     "ProductQueries": [
+     *       { "sku": "P123", "name": "Test Product" }, ...
+     *     ]
+     *   }
+     * }
+     * </pre>
+     * This method would collect all maps from "UserQueries" and "ProductQueries" lists.
+     * <p>
+     * It configures the {@link ObjectMapper} to ignore unknown properties. This method is primarily used by
+     * {@link DataProviderUtils} when the data source ({@code ConfigProperties.DATASOURCE}) is configured as "db".
+     * <p>
+     * <strong>Note on state:</strong> This method clears and then repopulates the static field {@link #finalDatalist}.
+     * Each call will reflect only the data from the current file read, not accumulate from previous calls.
+     *
+     * @return A {@code List<Map<String, Object>>} containing aggregated test data records from the JSON file.
+     *         Each map represents a single test data entry.
+     * @throws InvalidFilepathException if the JSON test data file is not found.
+     * @throws JsonExceptions if there is an error parsing the JSON content or other JSON processing issues.
+     * @see #getJsonTestDataDetails() for reading manually crafted JSON files.
+     * @see #generateTestDataJson()
+     * @see org.gcit.utils.DataProviderUtils
+     * @see FrameworkConstants#getTestDataJsonFilePath()
      */
     public static List<Map<String, Object>> getTestDataDetails() {
-        try {
+        finalDatalist.clear(); // Ensure fresh data on each call
+        String filePath = FrameworkConstants.getTestDataJsonFilePath(); // Path depends on current ENV property
+
+        // FileInputStream is now method-local and managed by try-with-resources
+        try (FileInputStream localFileInputStream = new FileInputStream(filePath)) {
             ObjectMapper objectMapper = new ObjectMapper();
             objectMapper.configure(
                     DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
-            fileInputStream =
-                    new FileInputStream(FrameworkConstants.getTestDataJsonFilePath());
-            HashMap<String, HashMap> jsonTestDataMap =
-                    objectMapper.readValue(fileInputStream, HashMap.class);
-            LinkedHashMap<String, Object> jsonTestDataLinkedMap =
-                    (LinkedHashMap) jsonTestDataMap.get(
-                            FrameworkConstants.getEnvironment());
-            try {
-                for (Map.Entry<String, Object> finaltestcasemap :
-                        jsonTestDataLinkedMap.entrySet()) {
-                    finalDatalist.addAll((ArrayList) finaltestcasemap.getValue());
+
+            // Define the expected structure for TypeReference
+            // Root: Map<EnvName, LinkedHashMap<QueryKey, List<TestDataRowMap>>>
+            TypeReference<LinkedHashMap<String, LinkedHashMap<String, ArrayList<HashMap<String, Object>>>>> typeRef =
+                    new TypeReference<LinkedHashMap<String, LinkedHashMap<String, ArrayList<HashMap<String, Object>>>>>() {};
+            LinkedHashMap<String, LinkedHashMap<String, ArrayList<HashMap<String, Object>>>> allEnvironmentsData =
+                    objectMapper.readValue(localFileInputStream, typeRef);
+
+            String currentEnv = PropertyUtils.getValue(ConfigProperties.ENV);
+            LinkedHashMap<String, ArrayList<HashMap<String, Object>>> currentEnvironmentQueryMap =
+                    allEnvironmentsData.get(currentEnv);
+
+            if (currentEnvironmentQueryMap != null) {
+                for (ArrayList<HashMap<String, Object>> queryResultsList : currentEnvironmentQueryMap.values()) {
+                    if (queryResultsList != null) {
+                        finalDatalist.addAll(queryResultsList);
+                    }
                 }
-            } catch (RuntimeException e) {
-                e.printStackTrace();
+            } else {
+                log(LogType.WARN, "No data found for environment: " + currentEnv + " in file: " + filePath +
+                                  ". Check if the JSON file contains a top-level key matching the environment string.");
             }
         } catch (FileNotFoundException e) {
-            throw new InvalidFilepathException("Test data JSON file not found in the given path. Please check your path: " + FrameworkConstants.getTestDataJsonFilePath());
-        } catch (Exception e) {
-            e.printStackTrace();
-        } finally {
-            if (Objects.nonNull(fileInputStream)) {
-                try {
-                    fileInputStream.close();
-                } catch (IOException e) {
-                    e.printStackTrace();
-                }
-            }
+            throw new InvalidFilepathException("Test data JSON file not found. Path: " + filePath, e);
+        } catch (IOException e) { // Catch specific IOException
+            log(LogType.ERROR, "I/O error processing test data JSON file: " + filePath, e);
+            throw new JsonExceptions("I/O error processing test data JSON file: " + filePath, e);
+        } catch (Exception e) { // Catch other potential runtime exceptions from Jackson parsing
+            log(LogType.ERROR, "Error parsing test data JSON file: " + filePath, e);
+            throw new JsonExceptions("Error parsing test data JSON file: " + filePath, e);
         }
-
         return finalDatalist;
     }
 
     /**
-     * Retrieves query details from a specified JSON file based on the given query type.
+     * Retrieves SQL query strings from a JSON configuration file (e.g., {@code SqlQueries.json}).
+     * <p>
+     * The method reads the JSON file specified by {@link FrameworkConstants#getSqlQueryjsonfilepath()}.
+     * It expects this file to contain a top-level JSON object. Inside this object, it looks for a key
+     * constructed by taking the {@code queryType} parameter, converting it to lowercase, and appending "queries"
+     * (e.g., if {@code queryType} is "Select", it looks for a key "selectqueries").
+     * <p>
+     * The value associated with this constructed key should itself be a JSON object (a map)
+     * where each key is a specific query name (e.g., "getUserById") and its value is the SQL query string.
+     * <p>
+     * Example JSON structure in {@code SqlQueries.json}:
+     * <pre>
+     * {
+     *   "selectqueries": {
+     *     "getUserById": "SELECT * FROM users WHERE id = ?",
+     *     "getAllProducts": "SELECT name, price FROM products"
+     *   },
+     *   "insertqueries": {
+     *     "addUser": "INSERT INTO users (username, email) VALUES (?, ?)"
+     *   }
+     * }
+     * </pre>
+     * If {@code queryType} is "Select", the method returns the map under "selectqueries".
+     * <p>
+     * The retrieved map of queries is cached in the static field {@link #queriesList} and also returned.
+     * If the specified {@code queryType} key is not found, an empty map is returned and a warning is logged.
      *
-     * @param queryType The type of queries to retrieve from the JSON file.
-     * @return A HashMap containing the query details corresponding to the specified query type.
-     * @throws InvalidFilepathException If the SQL Query list JSON file is not found in the given path.
+     * @param queryType The category of queries to retrieve (e.g., "select", "insert", "runnerlist").
+     *                  This is case-insensitive as it's converted to lowercase.
+     * @return A {@code HashMap<String, Object>} where keys are query names and values are SQL query strings.
+     *         Returns an empty map if the {@code queryType} is not found or has no associated queries.
+     * @throws InvalidFilepathException If the SQL queries JSON file is not found.
+     * @throws JsonExceptions if there's an error parsing the JSON file or an I/O error occurs.
+     * @see FrameworkConstants#getSqlQueryjsonfilepath()
      */
     public static HashMap<String, Object> getQueryDetails(String queryType) {
-        try {
+        String filePath = FrameworkConstants.getSqlQueryjsonfilepath();
+        // FileInputStream is now method-local and managed by try-with-resources
+        try (FileInputStream localFileInputStream = new FileInputStream(filePath)) {
             String keyname = queryType.toLowerCase() + "queries";
             ObjectMapper objectMapper = new ObjectMapper();
             objectMapper.configure(
                     DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
-            fileInputStream =
-                    new FileInputStream(FrameworkConstants.getSqlQueryjsonfilepath());
-            HashMap<String, Object> jsontestcasemap =
-                    objectMapper.readValue(fileInputStream, HashMap.class);
-            queriesList = (HashMap<String, Object>) jsontestcasemap.get(keyname);
-        } catch (FileNotFoundException e) {
-            throw new InvalidFilepathException("SQL Query list json file not found in the given path, please check your path:" + FrameworkConstants.getSqlQueryjsonfilepath());
-        } catch (Exception e) {
-            e.printStackTrace();
-        } finally {
-            if (Objects.nonNull(fileInputStream)) {
-                try {
-                    fileInputStream.close();
-                } catch (IOException e) {
-                    e.printStackTrace();
-                }
+
+            // Define the expected structure for TypeReference
+            // Root: Map<QueryTypeKey (e.g. "selectqueries"), Map<QueryName, QueryString>>
+            TypeReference<HashMap<String, HashMap<String, Object>>> typeRef =
+                    new TypeReference<HashMap<String, HashMap<String, Object>>>() {};
+            HashMap<String, HashMap<String, Object>> allQueryTypesMap =
+                    objectMapper.readValue(localFileInputStream, typeRef);
+
+            queriesList = allQueryTypesMap.get(keyname); // Update static field
+            if (queriesList == null) {
+                log(LogType.WARN, "Query type key '" + keyname + "' not found in " + filePath + ". Returning empty map.");
+                queriesList = new HashMap<>(); // Ensure non-null return for safety if key not found
             }
+        } catch (FileNotFoundException e) {
+            throw new InvalidFilepathException("SQL Query list json file not found at: " + filePath, e);
+        } catch (IOException e) { // Catch specific IOException
+            log(LogType.ERROR, "I/O error processing SQL query JSON file: " + filePath, e);
+            throw new JsonExceptions("I/O error processing SQL query JSON file: " + filePath, e);
+        } catch (Exception e) { // Catch other potential runtime exceptions
+            log(LogType.ERROR, "Error parsing SQL query JSON file: " + filePath, e);
+            throw new JsonExceptions("Error parsing SQL query JSON file: " + filePath, e);
         }
         return queriesList;
     }
 
     /**
-     * Generates a JSON file containing test data from a database based on the current environment settings.
+     * Generates a JSON file containing test data fetched from a database, filtered for the current execution environment.
      * <p>
-     * This method retrieves query details and executes them to fetch data from the database.
-     * The data is filtered according to the specified environment and then written to a JSON file.
-     * </p>
-     * <p>
-     * It handles various exceptions related to SQL operations and JSON processing.
-     * In case of any connection issues, it ensures the database connection is closed properly.
-     * </p>
-     * <p>
-     * Uses the following methods:
-     * {@link #getQueryDetails(String)}
-     * </p>
+     * This method performs the following steps:
+     * <ol>
+     *   <li>Clears any existing data in internal temporary maps ({@link #finalMap}, {@link #testDataHashMap}).</li>
+     *   <li>Retrieves SQL "select" queries using {@link #getQueryDetails(String) getQueryDetails("select")}.</li>
+     *   <li>Determines the current runtime environment ({@code runEnv}) via {@link PropertyUtils#getValue(ConfigProperties)} (key: {@link ConfigProperties#ENV}).</li>
+     *   <li>For each retrieved SQL query:
+     *     <ul>
+     *       <li>Executes the query using a database connection from {@link DataBaseConnectionUtils#getMyConn()}.</li>
+     *       <li>Iterates through the {@link ResultSet}, converting each row to a {@code HashMap<String, Object>} (column name -> value).</li>
+     *       <li>If a row contains an "environment" column, its value is checked against the current {@code runEnv}. Only matching rows are kept.</li>
+     *       <li>The filtered data rows for the query are collected into a list.</li>
+     *     </ul>
+     *   </li>
+     *   <li>The collected lists of data rows (one list per query key) are stored in {@link #finalMap}.</li>
+     *   <li>If {@link #finalMap} is not empty, it's wrapped into {@link #testDataHashMap} with {@code runEnv} as the key.</li>
+     *   <li>This {@link #testDataHashMap} is then serialized to a JSON file. The output path is determined by
+     *       {@link FrameworkConstants#getTestDataJsonFilePath(String) getTestDataJsonFilePath(runEnv)}.</li>
+     * </ol>
+     * Example output JSON structure for "QA" environment:
+     * <pre>
+     * {
+     *   "QA": {
+     *     "UserFetchQuery": [ { "id": 1, "name": "UserA", "environment": "qa" }, ... ],
+     *     "ProductFetchQuery": [ { "sku": "P101", "price": 20.50, "environment": "qa" }, ... ]
+     *   }
+     * }
+     * </pre>
+     * JDBC {@link Statement} and {@link ResultSet} are managed using try-with-resources.
+     * The database connection is closed in a {@code finally} block using {@link DataBaseConnectionUtils#closeConnection()}.
      *
-     * @throws SQLConnectionException     if there are issues executing the SQL queries.
-     * @throws JsonMappingException       if there is an error mapping the data to JSON format.
-     * @throws JsonGenerationException    if there is an error generating the JSON file.
-     * @throws FileNotFoundException      if the file path for the JSON file is invalid.
+     * @throws SQLConnectionException If there's an issue executing SQL queries (e.g., bad SQL syntax, DB connection problem).
+     * @throws JsonExceptions If there's an error during JSON serialization (mapping, generation) or if the output JSON file path is invalid.
+     *                        Wraps {@link IOException}s related to file writing.
+     * @see #getQueryDetails(String)
+     * @see DataBaseConnectionUtils
+     * @see FrameworkConstants#getTestDataJsonFilePath(String)
+     * @see PropertyUtils#getValue(ConfigProperties)
      */
     public static void generateTestDataJson() {
-        try {
-            Statement st = getMyConn().createStatement();
+        finalMap.clear(); // Clear previous data for the current run in this temporary map
+        testDataHashMap.clear(); // Clear the main map before populating for the current environment
+
+        try (Statement st = getMyConn().createStatement()) {
             HashMap<String, Object> queryDetails = getQueryDetails("select");
-            runEnv = FrameworkConstants.getEnvironment().trim().toLowerCase();
+            runEnv = PropertyUtils.getValue(ConfigProperties.ENV).trim().toLowerCase();
+
             for (Map.Entry<String, Object> mapdata : queryDetails.entrySet()) {
-                ResultSet resultSet = st.executeQuery((String) mapdata.getValue());
-                ResultSetMetaData resultSetMetaData = resultSet.getMetaData();
-                int columns = resultSetMetaData.getColumnCount();
-                ArrayList<HashMap<String, Object>> testDataList = new ArrayList<>();
-                while (resultSet.next()) {
-                    HashMap<String, Object> rowDatas = new HashMap<>(columns);
-                    envName = null;
-                    for (int i = 1; i <= columns; ++i) {
-                        String columnName = resultSetMetaData.getColumnName(i);
-                        Object columnValue = resultSet.getObject(i);
-                        rowDatas.put(columnName, columnValue);
-                        if (columnName.equalsIgnoreCase("environment")) {
-                            envName = resultSet.getString("environment").trim().toLowerCase();
+                try (ResultSet resultSet = st.executeQuery((String) mapdata.getValue())) {
+                    ResultSetMetaData resultSetMetaData = resultSet.getMetaData();
+                    int columns = resultSetMetaData.getColumnCount();
+                    ArrayList<HashMap<String, Object>> testDataList = new ArrayList<>();
+                    while (resultSet.next()) {
+                        HashMap<String, Object> rowDatas = new HashMap<>(columns);
+                        String currentDataEnvName = null; // Renamed to avoid confusion with outer 'envName' field
+                        for (int i = 1; i <= columns; ++i) {
+                            String columnName = resultSetMetaData.getColumnName(i);
+                            Object columnValue = resultSet.getObject(i);
+                            rowDatas.put(columnName, columnValue);
+                            if (columnName.equalsIgnoreCase("environment")) {
+                                // Ensure robust handling of null environment values from DB
+                                Object envVal = resultSet.getObject("environment");
+                                if (envVal != null) {
+                                    currentDataEnvName = String.valueOf(envVal).trim().toLowerCase();
+                                }
+                            }
+                        }
+                        if (runEnv.equals(currentDataEnvName)) {
+                            testDataList.add(rowDatas);
                         }
                     }
-                    if (runEnv.equals(envName)) {
+                    if (!testDataList.isEmpty()) {
+                        finalMap.put(mapdata.getKey(), testDataList);
+                    }
+                } // ResultSet automatically closed here
+            }
+
+            if (!finalMap.isEmpty()) {
+                // Store the collected data for the current environment into the main map
+                testDataHashMap.put(runEnv, new LinkedHashMap<>(finalMap)); // Use a copy
+                ObjectMapper mapper = new ObjectMapper();
+                String testDataJsonPath = FrameworkConstants.getTestDataJsonFilePath(runEnv);
+                mapper.writerWithDefaultPrettyPrinter().writeValue(
+                        new File(testDataJsonPath),
+                        testDataHashMap); // testDataHashMap now contains only the current runEnv data
+                log(LogType.INFO, "Test data JSON generated successfully for environment '" + runEnv + "' at: " + testDataJsonPath);
+            } else {
+                log(LogType.INFO, "No matching data found for runEnv: " + runEnv + ". Test data JSON file not generated.");
+            }
+        } catch (SQLException e) {
+            throw new SQLConnectionException("Unable to execute SQL query for test data generation. Check query configurations and DB connection.", e);
+        } catch (JsonMappingException e) {
+            throw new JsonExceptions("JSON mapping exception occurred during test data generation.", e);
+        } catch (JsonGenerationException e) {
+            throw new JsonExceptions("JSON generation exception occurred during test data generation.", e);
+        } catch (FileNotFoundException e) { // This specifically handles the output file not being found for writing (e.g. bad path)
+            String targetPath = FrameworkConstants.getTestDataJsonFilePath(runEnv != null ? runEnv : "UNKNOWN_ENV");
+            throw new JsonExceptions("Unable to write test data to JSON file. Target file path or directory may be missing or invalid: " + targetPath, e);
+        } catch (IOException e) { // General IO for file writing issues
+            log(LogType.ERROR, "IO Exception during test data JSON generation for env: " + (runEnv != null ? runEnv : "UNKNOWN_ENV"), e);
+            throw new JsonExceptions("IO Exception during test data JSON generation for env: " + (runEnv != null ? runEnv : "UNKNOWN_ENV"), e);
+        } finally {
+            if (Objects.nonNull(getMyConn())) {
+                closeConnection();
+            }
+        }
+    }
+
+    /**
+     * Generates a JSON file (typically {@code runmanager.json}) containing a list of test cases to execute,
+     * based on data fetched from a database.
+     * <p>
+     * This method performs the following steps:
+     * <ol>
+     *   <li>Clears internal temporary lists ({@link #finalTestList}, {@link #testRunnerHashMap}).</li>
+     *   <li>Retrieves SQL "runnerlist" queries using {@link #getQueryDetails(String) getQueryDetails("runnerlist")}.</li>
+     *   <li>For each retrieved SQL query:
+     *     <ul>
+     *       <li>Executes the query using a database connection from {@link DataBaseConnectionUtils#getMyConn()}.</li>
+     *       <li>Processes the {@link ResultSet}, converting each row into a {@code HashMap<String, Object>} (column name -> value).</li>
+     *       <li>These rows (maps) are collected into a list associated with the query key.</li>
+     *     </ul>
+     *   </li>
+     *   <li>The collected lists (one per query key) are stored in {@link #finalTestList}.</li>
+     *   <li>{@link #finalTestList} is then wrapped into {@link #testRunnerHashMap} using a top-level key
+     *       obtained from {@link FrameworkConstants#getRunmanager()}.</li>
+     *   <li>This {@link #testRunnerHashMap} is serialized to a JSON file at the path specified by
+     *       {@link FrameworkConstants#getTestCaseJsonPath()}.</li>
+     * </ol>
+     * Example output JSON structure:
+     * <pre>
+     * {
+     *   "RunManager": { // Key from FrameworkConstants.getRunmanager()
+     *     "SmokeTestsQuery": [ // Query key from "runnerlist" queries
+     *       { "testcasename": "TC001_Login", "execute": "yes", "priority": "P0" }, ...
+     *     ],
+     *     "RegressionPack1Query": [
+     *       { "testcasename": "TC002_Search", "execute": "yes", "priority": "P1" }, ...
+     *     ]
+     *   }
+     * }
+     * </pre>
+     * JDBC {@link Statement} and {@link ResultSet} are managed using try-with-resources.
+     * The database connection closure is assumed to be handled externally or by the lifecycle
+     * management of {@link DataBaseConnectionUtils}, as no explicit close call is made in this method's finally block.
+     *
+     * @throws SQLConnectionException If there's an issue executing SQL queries.
+     * @throws JsonExceptions If there's an error during JSON serialization or if the output file path is invalid.
+     *                        Wraps {@link IOException}s related to file writing.
+     * @see #getQueryDetails(String)
+     * @see DataBaseConnectionUtils
+     * @see FrameworkConstants#getTestCaseJsonPath()
+     * @see FrameworkConstants#getRunmanager()
+     */
+    public static void generateRunnerListJsonData() {
+        finalTestList.clear(); // Clear before populating
+        testRunnerHashMap.clear(); // Clear before populating
+
+        try (Statement st = getMyConn().createStatement()) {
+            HashMap<String, Object> queryDetails = getQueryDetails("runnerlist");
+            for (Map.Entry<String, Object> mapdata : queryDetails.entrySet()) {
+                try (ResultSet resultSet = st.executeQuery((String) mapdata.getValue())) {
+                    ResultSetMetaData resultSetMetaData = resultSet.getMetaData();
+                    int columns = resultSetMetaData.getColumnCount();
+                    ArrayList<HashMap<String, Object>> testDataList = new ArrayList<>(); // Changed from raw type
+                    while (resultSet.next()) {
+                        HashMap<String, Object> rowDatas = new HashMap<>(columns); // Changed from raw type
+                        for (int i = 1; i <= columns; ++i) {
+                            rowDatas.put(
+                                    resultSetMetaData.getColumnName(i), resultSet.getObject(i));
+                        }
                         testDataList.add(rowDatas);
                     }
-                }
-                if (!testDataList.isEmpty()) {
-                    finalMap.put(mapdata.getKey(), testDataList);
-                }
+                    finalTestList.put(mapdata.getKey(), testDataList);
+                } // ResultSet automatically closed here
+            }
+            testRunnerHashMap.put(FrameworkConstants.getRunmanager(), new LinkedHashMap<>(finalTestList)); // Use a copy
+            ObjectMapper mapper = new ObjectMapper();
+            String outputPath = FrameworkConstants.getTestCaseJsonPath();
+            mapper.writerWithDefaultPrettyPrinter().writeValue(
+                    new File(outputPath),
+                    testRunnerHashMap);
+            log(LogType.INFO, "Runner list JSON generated successfully at: " + outputPath);
+        } catch (SQLException e) {
+            throw new SQLConnectionException("Unable to execute SQL query for runner list generation. Check query configurations and DB connection.", e);
+        } catch (JsonMappingException e) {
+            throw new JsonExceptions("JSON mapping exception occurred during runner list generation.", e);
+        } catch (JsonGenerationException e) {
+            throw new JsonExceptions("JSON generation exception occurred during runner list generation.", e);
+        } catch (FileNotFoundException e) { // Specifically for output file path issues
+            throw new JsonExceptions("Unable to write runner list to JSON file. Target file path or directory may be missing: " + FrameworkConstants.getTestCaseJsonPath(), e);
+        } catch (IOException e) { // General IO for file writing
+            log(LogType.ERROR, "IO Exception during runner list JSON generation", e);
+            throw new JsonExceptions("IO Exception during runner list JSON generation", e);
+        }
+        // Note: Connection closing for generateRunnerListJsonData is assumed to be handled by DataBaseConnectionUtils lifecycle
+        // or by the calling context, as it lacks a specific 'finally closeConnection()' block here, unlike generateTestDataJson.
+    }
+}
+    public static void generateTestDataJson() {
+        // Statement is managed by try-with-resources
+        try (Statement st = getMyConn().createStatement()) {
+            HashMap<String, Object> queryDetails = getQueryDetails("select");
+            runEnv = PropertyUtils.getValue(ConfigProperties.ENV).trim().toLowerCase(); // Use PropertyUtils
+            for (Map.Entry<String, Object> mapdata : queryDetails.entrySet()) {
+                // ResultSet is managed by try-with-resources
+                try (ResultSet resultSet = st.executeQuery((String) mapdata.getValue())) {
+                    ResultSetMetaData resultSetMetaData = resultSet.getMetaData();
+                    int columns = resultSetMetaData.getColumnCount();
+                    ArrayList<HashMap<String, Object>> testDataList = new ArrayList<>();
+                    while (resultSet.next()) {
+                        HashMap<String, Object> rowDatas = new HashMap<>(columns);
+                        envName = null;
+                        for (int i = 1; i <= columns; ++i) {
+                            String columnName = resultSetMetaData.getColumnName(i);
+                            Object columnValue = resultSet.getObject(i);
+                            rowDatas.put(columnName, columnValue);
+                            if (columnName.equalsIgnoreCase("environment")) {
+                                envName = resultSet.getString("environment").trim().toLowerCase();
+                            }
+                        }
+                        if (runEnv.equals(envName)) {
+                            testDataList.add(rowDatas);
+                        }
+                    }
+                    if (!testDataList.isEmpty()) {
+                        finalMap.put(mapdata.getKey(), testDataList);
+                    }
+                } // ResultSet automatically closed here
             }
             if (!finalMap.isEmpty()) {
                 testDataHashMap.put(runEnv, finalMap);
-                FrameworkConstants.setEnvironment(runEnv);
                 ObjectMapper mapper = new ObjectMapper();
-                FrameworkConstants.setTestDataJsonFilePath(runEnv);
+                String testDataJsonPath = FrameworkConstants.getTestDataJsonFilePath(runEnv);
                 mapper.writerWithDefaultPrettyPrinter().writeValue(
-                        new File(FrameworkConstants.getTestDataJsonFilePath()),
+                        new File(testDataJsonPath),
                         testDataHashMap);
             } else {
                 System.out.println("No matching data found for runEnv: " + runEnv);
             }
         } catch (SQLException e) {
-            throw new SQLConnectionException("Unable to execute the query runner list, please check the query configurations.", e);
+            throw new SQLConnectionException("Unable to execute the query for test data generation, please check the query configurations.", e);
         } catch (JsonMappingException e) {
-            throw new JsonExceptions("Json mapping exception occurred", e);
+            throw new JsonExceptions("Json mapping exception occurred during test data generation.", e);
         } catch (JsonGenerationException e) {
-            throw new JsonExceptions("Json generation exception occurred", e);
+            throw new JsonExceptions("Json generation exception occurred during test data generation.", e);
         } catch (FileNotFoundException e) {
-            throw new JsonExceptions("Unable to write the test runner list to JSON file. Test runner list JSON file path/directory is missing!", e);
+            throw new JsonExceptions("Unable to write the test data to JSON file. Test data JSON file path/directory is missing!", e);
         } catch (IOException e) {
-            e.printStackTrace();
+            log(LogType.ERROR, "IO Exception during test data JSON generation for env: " + runEnv, e);
+            throw new JsonExceptions("IO Exception during test data JSON generation for env: " + runEnv, e);
         } finally {
+            // Connection closing is handled by the existing finally block
             if (Objects.nonNull(getMyConn())) {
                 closeConnection();
             }
@@ -415,24 +894,26 @@ public final class JsonUtils {
      * - IOException: Thrown for general I/O errors.
      */
     public static void generateRunnerListJsonData() {
-        try {
-            Statement st = getMyConn().createStatement();
+        // Statement is managed by try-with-resources
+        try (Statement st = getMyConn().createStatement()) {
             HashMap<String, Object> queryDetails = getQueryDetails("runnerlist");
             for (Map.Entry<String, Object> mapdata : queryDetails.entrySet()) {
-                ResultSet resultSet = st.executeQuery((String) mapdata.getValue());
-                ResultSetMetaData resultSetMetaData = resultSet.getMetaData();
-                int columns = resultSetMetaData.getColumnCount();
-                HashMap<String, Object> rowDatas;
-                ArrayList<HashMap<String, Object>> testDataList = new ArrayList();
-                while (resultSet.next()) {
-                    rowDatas = new HashMap(columns);
-                    for (int i = 1; i <= columns; ++i) {
-                        rowDatas.put(
-                                resultSetMetaData.getColumnName(i), resultSet.getObject(i));
+                // ResultSet is managed by try-with-resources
+                try (ResultSet resultSet = st.executeQuery((String) mapdata.getValue())) {
+                    ResultSetMetaData resultSetMetaData = resultSet.getMetaData();
+                    int columns = resultSetMetaData.getColumnCount();
+                    HashMap<String, Object> rowDatas;
+                    ArrayList<HashMap<String, Object>> testDataList = new ArrayList();
+                    while (resultSet.next()) {
+                        rowDatas = new HashMap(columns);
+                        for (int i = 1; i <= columns; ++i) {
+                            rowDatas.put(
+                                    resultSetMetaData.getColumnName(i), resultSet.getObject(i));
+                        }
+                        testDataList.add(rowDatas);
                     }
-                    testDataList.add(rowDatas);
-                }
-                finalTestList.put(mapdata.getKey(), testDataList);
+                    finalTestList.put(mapdata.getKey(), testDataList);
+                } // ResultSet automatically closed here
             }
             testRunnerHashMap.put(FrameworkConstants.getRunmanager(), finalTestList);
             ObjectMapper mapper = new ObjectMapper();
@@ -440,16 +921,20 @@ public final class JsonUtils {
                     new File(FrameworkConstants.getTestCaseJsonPath()),
                     testRunnerHashMap);
         } catch (SQLException e) {
-            throw new SQLConnectionException("Unable to execute the query runner list, please check the query configurations.", e);
+            throw new SQLConnectionException("Unable to execute the query for runner list generation, please check the query configurations.", e);
         } catch (JsonMappingException e) {
-            throw new JsonExceptions("Json mapping exception occurred", e);
+            throw new JsonExceptions("Json mapping exception occurred during runner list generation.", e);
         } catch (JsonGenerationException e) {
-            throw new JsonExceptions("Json generation exception occurred", e);
+            throw new JsonExceptions("Json generation exception occurred during runner list generation.", e);
         } catch (FileNotFoundException e) {
-            throw new JsonExceptions("Unable to write the test runner list to JSON file. Test runner list JSON file path/directory is missing!", e);
-
+            throw new JsonExceptions("Unable to write the runner list to JSON file. Runner list JSON file path/directory is missing!", e);
         } catch (IOException e) {
-            e.printStackTrace();
+            log(LogType.ERROR, "IO Exception during runner list JSON generation", e);
+            throw new JsonExceptions("IO Exception during runner list JSON generation", e);
         }
+        // The finally block for closing connection for generateRunnerListJsonData is intentionally kept as is.
+        // Based on the existing code, it seems this method might not be responsible for closing the connection,
+        // or it's handled by a higher-level mechanism or the caller.
+        // If generateRunnerListJsonData should close the connection, a finally block with closeConnection() would be needed here.
     }
 }

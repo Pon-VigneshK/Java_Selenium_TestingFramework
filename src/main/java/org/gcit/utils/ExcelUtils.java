@@ -19,25 +19,43 @@ import java.util.Map;
 import static org.gcit.logger.LogService.log;
 
 /**
- * Utility class for operations related to Excel files.
- * Provides methods to extract data from Excel sheets for testing purposes.
+ * Utility class for performing operations related to Microsoft Excel files,
+ * primarily focused on extracting test data from {@code .xlsx} sheets.
+ * <p>
+ * This class provides static methods to read data from specified sheets within an Excel workbook.
+ * It assumes a common structure where the first row of a sheet contains column headers,
+ * and subsequent rows contain the actual test data.
+ *
+ * @see org.gcit.constants.FrameworkConstants#getExcelFilePath()
  */
 public final class ExcelUtils {
     /**
-     * Private constructor to prevent instantiation of the ExcelUtils utility class.
-     * This class is designed to provide static methods for operations related to Excel files.
+     * Private constructor to prevent instantiation of this utility class.
      */
     private ExcelUtils() {
     }
 
     /**
-     * Extracts test details from the specified Excel sheet and returns them as a list of maps.
-     * Each map represents a row in the sheet, with keys as column headers and values as cell values.
+     * Extracts test data from the specified Excel sheet and returns it as a list of maps.
+     * <p>
+     * This method reads an Excel file located at the path defined by {@link FrameworkConstants#getExcelFilePath()}.
+     * It expects the first row (row 0) of the specified sheet to contain the column headers.
+     * Each subsequent row is treated as a data record.
+     * <p>
+     * Each map in the returned list represents one row of data, where the keys are the
+     * column headers (from the first row) and the values are the corresponding cell values
+     * from that data row, converted to strings using {@link #convertCellValueToString(Cell)}.
      *
      * @param sheetname The name of the Excel sheet from which to extract the test details.
-     * @return A list of maps containing the test details from the specified sheet.
-     * @throws ExcelFileNotFoundException If the Excel file is not found.
-     * @throws BaseException If an error occurs while reading the Excel sheet.
+     *                  Must not be null or empty.
+     * @return A {@code List<Map<String, String>>} containing the test data. Each map represents a row,
+     *         with column headers as keys and cell values as string values. Returns an empty list if
+     *         the sheet has no data rows (beyond the header row).
+     * @throws ExcelFileNotFoundException If the Excel file specified by {@link FrameworkConstants#getExcelFilePath()} is not found.
+     * @throws BaseException If an I/O error occurs while reading the Excel file or sheet,
+     *                       or if the sheet structure is not as expected (e.g., missing header row).
+     * @see #convertCellValueToString(Cell)
+     * @see FrameworkConstants#getExcelFilePath()
      */
     public static List<Map<String, String>> getTestDetails(String sheetname) {
         List<Map<String, String>> list = new ArrayList<>();
@@ -69,10 +87,23 @@ public final class ExcelUtils {
     }
 
     /**
-     * Converts the value of a given Excel cell into a string.
+     * Converts the value of a given Excel {@link Cell} into its string representation.
+     * <p>
+     * This method handles various cell types:
+     * <ul>
+     *   <li>{@link CellType#STRING}: Returns the string value directly.</li>
+     *   <li>{@link CellType#NUMERIC}: Converts numeric values. If the number is an integer (e.g., 123.0),
+     *       it's converted to its integer string representation (e.g., "123"). Otherwise, it's converted
+     *       to its standard double string representation.</li>
+     *   <li>{@link CellType#BOOLEAN}: Converts to "true" or "false".</li>
+     *   <li>{@link CellType#FORMULA}: Returns the formula string itself, not the evaluated result.</li>
+     *   <li>{@code null} cell: Returns an empty string.</li>
+     *   <li>Other cell types (e.g., {@link CellType#BLANK}, {@link CellType#ERROR}): Returns an empty string.</li>
+     * </ul>
      *
-     * @param cell the cell whose value needs to be converted to a string
-     * @return the string representation of the cell's value
+     * @param cell The Excel cell whose value needs to be converted to a string. Can be {@code null}.
+     * @return The string representation of the cell's value. Returns an empty string if the cell is {@code null}
+     *         or if its type is not explicitly handled (like BLANK or ERROR).
      */
     private static String convertCellValueToString(Cell cell) {
         if (cell == null) {
@@ -84,16 +115,20 @@ public final class ExcelUtils {
                 return cell.getStringCellValue();
             case NUMERIC:
                 double numericValue = cell.getNumericCellValue();
-                if (numericValue % 1 == 0) {
-                    return String.valueOf((int) numericValue);
+                // Check if the numeric value is an integer (e.g., 10.0, 123.0)
+                if (numericValue == Math.floor(numericValue) && !Double.isInfinite(numericValue)) {
+                    return String.valueOf((long) numericValue); // Use long to handle larger integers before converting to string
                 } else {
-                    return String.valueOf(numericValue);
+                    return String.valueOf(numericValue); // For actual floating-point numbers
                 }
             case BOOLEAN:
                 return String.valueOf(cell.getBooleanCellValue());
             case FORMULA:
+                // Note: This returns the formula string itself, e.g., "SUM(A1:B1)".
+                // To get the evaluated result of a formula, a FormulaEvaluator would be needed.
                 return cell.getCellFormula();
             default:
+                // Handles BLANK, ERROR, and any other types by returning an empty string.
                 return "";
         }
     }

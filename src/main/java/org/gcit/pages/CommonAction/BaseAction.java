@@ -14,21 +14,44 @@ import static org.gcit.enums.LogType.INFO;
 import static org.gcit.logger.LogService.log;
 
 /**
- * BaseAction provides a set of reusable methods for common web interactions
- * using the Selenium WebDriver. These methods include clicking on elements,
- * sending keys to input fields, handling dropdown selections, and managing
- * browser window behaviors, among others. It is designed to be extended by
- * page-specific action classes.
+ * Provides a base set of reusable actions commonly performed on web elements during UI automation.
+ * <p>
+ * This class encapsulates Selenium WebDriver interactions such as clicking, sending keys,
+ * selecting from dropdowns, and checking element states (visibility, text). It integrates
+ * with {@link ExplicitWaitFactory} to ensure elements are interactable before actions are
+ * performed, and with {@link ExtentLogger} and {@link org.gcit.logger.LogService} for comprehensive
+ * logging of actions and their outcomes.
+ * <p>
+ * Page object classes within the framework should extend this class to inherit these common
+ * action methods, promoting code reuse and consistent interaction patterns.
+ * All action methods are {@code protected} to be accessible by subclasses.
+ * <p>
+ * Note: Current error handling within these methods typically logs the exception and
+ * prints the stack trace, but does not re-throw the exception (unless it's a fatal error like
+ * {@link OutOfMemoryError} or {@link StackOverflowError}). For methods that are expected to return a value
+ * (e.g., {@link #getText(By, WaitStrategy, String)}, {@link #isVisible(By, WaitStrategy, String)}),
+ * they return {@code null} or {@code false} respectively in case of an exception.
+ *
+ * @see ExplicitWaitFactory
+ * @see ExtentLogger
+ * @see org.gcit.logger.LogService
+ * @see org.openqa.selenium.WebDriver
+ * @see org.openqa.selenium.WebElement
  */
 public class BaseAction {
 
     /**
-     * Attempts to click on a web element identified by the specified locator and wait strategy.
-     * If the click is successful, the action is logged; otherwise, an exception is caught and logged.
+     * Performs a click action on a web element identified by the given locator,
+     * after applying the specified wait strategy.
+     * <p>
+     * Logs the action to both ExtentReports (with a screenshot on success/failure if configured)
+     * and the console log. If any exception occurs during the wait or click,
+     * it is caught, logged, and its stack trace is printed; the method does not re-throw the exception.
      *
-     * @param by the locator used to identify the web element.
-     * @param waitStrategy the strategy to use for waiting before attempting to click.
-     * @param elementName the name of the web element, used for logging purposes.
+     * @param by           The {@link By} locator strategy to find the web element.
+     * @param waitStrategy The {@link WaitStrategy} to apply before attempting to click the element
+     *                     (e.g., {@link WaitStrategy#CLICKABLE}, {@link WaitStrategy#VISIBLE}).
+     * @param elementName  A descriptive name for the element being clicked, used for logging purposes.
      */
     protected void click(By by, WaitStrategy waitStrategy, String elementName) {
         try {
@@ -37,41 +60,53 @@ public class BaseAction {
             log(INFO, "Clicked on element '" + elementName + "'");
         } catch (Exception e) {
             ExtentLogger.fail("Unable to click on element '" + elementName + "'", true);
-            log(ERROR, "Unable to click on element '" + elementName + "'");
-            e.printStackTrace();
+            log(ERROR, "Unable to click on element '" + elementName + "'. Exception: " + e.getMessage());
+            e.printStackTrace(); // Current behavior: prints stack trace.
         }
     }
 
     /**
-     * Sends the specified value to an HTML element found using the given locator.
+     * Enters the specified text value into a web element (typically an input field)
+     * identified by the given locator, after applying the specified wait strategy.
+     * <p>
+     * Logs the action to ExtentReports (optionally with a screenshot) and the console log.
+     * If any exception occurs, it is caught, logged, and its stack trace is printed;
+     * the method does not re-throw the exception.
      *
-     * @param by the locator used to find the web element
-     * @param value the value to be sent to the web element
-     * @param waitStrategy the strategy to use for waiting (CLICKABLE, PRESENCE, VISIBLE, NONE)
-     * @param elementName the name of the element for logging purposes
-     * @param log boolean flag indicating whether to log the action
+     * @param by           The {@link By} locator strategy to find the web element.
+     * @param value        The text string to be entered into the element.
+     * @param waitStrategy The {@link WaitStrategy} to apply before attempting to send keys
+     *                     (e.g., {@link WaitStrategy#VISIBLE}, {@link WaitStrategy#PRESENCE}).
+     * @param elementName  A descriptive name for the element, used for logging.
+     * @param logToExtent  A boolean flag indicating whether this action should be logged as a separate
+     *                     "pass" step in ExtentReports. Console logging occurs regardless.
      */
-    protected void sendKeys(By by, String value, WaitStrategy waitStrategy, String elementName, boolean log) {
+    protected void sendKeys(By by, String value, WaitStrategy waitStrategy, String elementName, boolean logToExtent) {
         try {
             ExplicitWaitFactory.performExplicitWait(waitStrategy, by).sendKeys(value);
-            if (log) {
+            if (logToExtent) {
                 ExtentLogger.pass("Entered value '" + value + "' in element '" + elementName + "'", true);
             }
             log(INFO, "Entered value '" + value + "' in element '" + elementName + "'");
         } catch (Exception e) {
             ExtentLogger.fail("Unable to enter value '" + value + "' in element '" + elementName + "'", true);
-            log(ERROR, "Unable to enter value '" + value + "' in element '" + elementName + "'");
-            e.printStackTrace();
+            log(ERROR, "Unable to enter value '" + value + "' in element '" + elementName + "'. Exception: " + e.getMessage());
+            e.printStackTrace(); // Current behavior: prints stack trace.
         }
     }
 
     /**
-     * Selects a value in a dropdown element by its index.
+     * Selects an option from a dropdown ({@code <select>}) web element by its zero-based index.
+     * <p>
+     * The method waits for the dropdown element to be interactable based on the {@code waitStrategy}.
+     * Logs the selection to ExtentReports and the console log. If any exception occurs
+     * (e.g., element not found, not a select, index out of bounds), it is caught, logged,
+     * and its stack trace is printed; the method does not re-throw the exception.
      *
-     * @param by the locator used to find the dropdown element
-     * @param index the index of the option to be selected
-     * @param waitStrategy the strategy to use for waiting for the dropdown element to be interactable
-     * @param elementName the name of the dropdown element, used for logging purposes
+     * @param by           The {@link By} locator strategy to find the dropdown element.
+     * @param index        The zero-based index of the option to select.
+     * @param waitStrategy The {@link WaitStrategy} to apply before interacting with the dropdown.
+     * @param elementName  A descriptive name for the dropdown element, used for logging.
      */
     protected void selectedValueInDropdownByIndex(By by, int index, WaitStrategy waitStrategy, String elementName) {
         try {
@@ -82,149 +117,163 @@ public class BaseAction {
             log(INFO, "Selected index {" + index + "} in dropdown: {" + elementName + "}");
         } catch (Exception e) {
             ExtentLogger.fail("Error selecting index {" + index + "} in dropdown: {" + elementName + "}", true);
-            log(ERROR, "Error selecting index {" + index + "} in dropdown: {" + elementName + "}");
-            e.printStackTrace();
+            log(ERROR, "Error selecting index {" + index + "} in dropdown: {" + elementName + "}. Exception: " + e.getMessage());
+            e.printStackTrace(); // Current behavior: prints stack trace.
         }
     }
 
     /**
-     * Checks the visibility of a web element located by the specified locator and wait strategy.
-     * Logs the visibility status and returns a boolean indicating whether the element is visible.
+     * Checks if a web element, identified by the given locator, is visible on the page
+     * after applying the specified wait strategy.
+     * <p>
+     * Logs the visibility status to ExtentReports and the console log.
+     * If any exception occurs during the process (e.g., element not found even after wait),
+     * it's logged, its stack trace is printed, and the method returns {@code false}.
      *
-     * @param by the locator used to find the web element
-     * @param waitStrategy the strategy to use for waiting (CLICKABLE, PRESENCE, VISIBLE, NONE)
-     * @param elementName the name of the element to be used in logging
-     * @return true if the element is visible, false otherwise
+     * @param by           The {@link By} locator strategy to find the web element.
+     * @param waitStrategy The {@link WaitStrategy} to apply (typically {@link WaitStrategy#VISIBLE} or {@link WaitStrategy#PRESENCE}).
+     * @param elementName  A descriptive name for the element, used for logging.
+     * @return {@code true} if the element is found and displayed (i.e., {@link WebElement#isDisplayed()} is true);
+     *         {@code false} otherwise, or if an exception occurs.
      */
     protected boolean isVisible(By by, WaitStrategy waitStrategy, String elementName) {
         try {
             WebElement element = ExplicitWaitFactory.performExplicitWait(waitStrategy, by);
             boolean isVisible = element != null && element.isDisplayed();
             if (isVisible) {
-                ExtentLogger.pass("Element '" + elementName + "' is visible", true);
+                ExtentLogger.pass("Element '" + elementName + "' is visible", false); // Typically, isVisible checks are info, not steps needing screenshots
                 log(INFO, "Element '" + elementName + "' is visible");
             } else {
-                ExtentLogger.fail("Element '" + elementName + "' is not visible", true);
-                log(ERROR, "Element '" + elementName + "' is not visible");
+                // Log as info or warning rather than fail, as isVisible is a check, not an action that failed.
+                // The calling test would determine if non-visibility is a failure.
+                ExtentLogger.info("Element '" + elementName + "' is not visible");
+                log(INFO, "Element '" + elementName + "' is not visible");
             }
             return isVisible;
         } catch (Exception e) {
-            ExtentLogger.fail("Error checking visibility of element '" + elementName + "'", true);
-            log(ERROR, "Error checking visibility of element '" + elementName + "'");
-            e.printStackTrace();
+            // Log as error because the check itself failed, not necessarily that the element is definitively not visible.
+            ExtentLogger.fail("Error checking visibility of element '" + elementName + "'. It might not be present or an error occurred.", false);
+            log(ERROR, "Error checking visibility of element '" + elementName + "'. Exception: " + e.getMessage());
+            e.printStackTrace(); // Current behavior: prints stack trace.
             return false;
         }
     }
 
     /**
-     * Retrieves the text of a web element identified by the specified locator, applies the given wait strategy, and logs the result.
+     * Retrieves the visible text content of a web element identified by the given locator,
+     * after applying the specified wait strategy.
+     * <p>
+     * Logs the retrieved text to ExtentReports and the console log. If any exception occurs
+     * (e.g., element not found, element has no text), it is caught, logged,
+     * its stack trace is printed, and the method returns {@code null}.
      *
-     * @param by the locator used to find the web element
-     * @param waitStrategy the strategy to use for waiting (CLICKABLE, PRESENCE, VISIBLE, NONE)
-     * @param elementName the name of the element, used for logging purposes
-     * @return the text retrieved from the web element, or {@code null} if an exception occurs
+     * @param by           The {@link By} locator strategy to find the web element.
+     * @param waitStrategy The {@link WaitStrategy} to apply (e.g., {@link WaitStrategy#VISIBLE}).
+     * @param elementName  A descriptive name for the element, used for logging.
+     * @return The text content of the element as a String, or {@code null} if the element
+     *         is not found, has no text, or an exception occurs.
      */
     protected String getText(By by, WaitStrategy waitStrategy, String elementName) {
         try {
             String text = ExplicitWaitFactory.performExplicitWait(waitStrategy, by).getText();
-            ExtentLogger.pass("Retrieved text '" + text + "' from element '" + elementName + "'", true);
+            ExtentLogger.pass("Retrieved text '" + text + "' from element '" + elementName + "'", false); // Screenshot usually not needed for getText
             log(INFO, "Retrieved text '" + text + "' from element '" + elementName + "'");
             return text;
         } catch (Exception e) {
-            ExtentLogger.fail("Unable to retrieve text from element '" + elementName + "'", true);
-            log(ERROR, "Unable to retrieve text from element '" + elementName + "'");
-            e.printStackTrace();
+            ExtentLogger.fail("Unable to retrieve text from element '" + elementName + "'", true); // Screenshot might be useful here
+            log(ERROR, "Unable to retrieve text from element '" + elementName + "'. Exception: " + e.getMessage());
+            e.printStackTrace(); // Current behavior: prints stack trace.
             return null;
         }
     }
 
     /**
-     * Maximizes the browser window to occupy the full screen.
-     *
-     * If the window is successfully maximized, it logs a success message and reports it using ExtentLogger.
-     * In case of an exception during the process, logs an error message and reports the failure using ExtentLogger.
+     * Maximizes the current browser window.
+     * <p>
+     * Logs the action to ExtentReports and the console log. If any exception occurs,
+     * it is caught, logged, and its stack trace is printed.
      */
     protected void maximizeWindow() {
         try {
             getDriver().manage().window().maximize();
-            ExtentLogger.pass("Window maximized successfully", true);
-            log(INFO, "Window maximized successfully");
+            ExtentLogger.pass("Browser window maximized successfully", false);
+            log(INFO, "Browser window maximized successfully");
         } catch (Exception e) {
-            ExtentLogger.fail("Unable to maximize window", true);
-            log(ERROR, "Unable to maximize window");
-            e.printStackTrace();
+            ExtentLogger.fail("Unable to maximize browser window", false);
+            log(ERROR, "Unable to maximize browser window. Exception: " + e.getMessage());
+            e.printStackTrace(); // Current behavior: prints stack trace.
         }
     }
 
     /**
-     * Minimizes the browser window.
-     *
-     * This method attempts to minimize the browser window using the WebDriver instance.
-     * It also logs the result of the action using ExtentLogger and a custom logging system.
-     *
-     * If the window is successfully minimized, it logs a pass message.
-     * If the window cannot be minimized due to an exception, it logs a fail message
-     * and prints the stack trace of the exception.
+     * Minimizes the current browser window.
+     * <p>
+     * Logs the action to ExtentReports and the console log. If any exception occurs
+     * (e.g., operation not supported by the driver), it is caught, logged, and its stack trace is printed.
+     * Note: WebDriver's ability to minimize windows can be driver and OS-dependent.
      */
     protected void minimizeWindow() {
         try {
             getDriver().manage().window().minimize();
-            ExtentLogger.pass("Window minimized successfully", true);
-            log(INFO, "Window minimized successfully");
+            ExtentLogger.pass("Browser window minimized successfully", false);
+            log(INFO, "Browser window minimized successfully");
         } catch (Exception e) {
-            ExtentLogger.fail("Unable to minimize window", true);
-            log(ERROR, "Unable to minimize window");
-            e.printStackTrace();
+            ExtentLogger.fail("Unable to minimize browser window", false);
+            log(ERROR, "Unable to minimize browser window. Exception: " + e.getMessage());
+            e.printStackTrace(); // Current behavior: prints stack trace.
         }
     }
 
     /**
-     * Sets the browser window to full screen mode.
-     *
-     * This method attempts to maximize the browser window to full screen using the
-     * WebDriver's window management capabilities. Upon successful operation, it logs the success message
-     * via ExtentLogger and a custom logging mechanism.
-     *
-     * If an exception occurs during the process, the method logs the failure message and stack trace.
+     * Sets the current browser window to full-screen mode.
+     * <p>
+     * Logs the action to ExtentReports and the console log. If any exception occurs,
+     * it is caught, logged, and its stack trace is printed.
      */
     protected void setFullScreen() {
         try {
             getDriver().manage().window().fullscreen();
-            ExtentLogger.pass("Window set to full screen successfully", true);
-            log(INFO, "Window set to full screen successfully");
+            ExtentLogger.pass("Browser window set to full screen successfully", false);
+            log(INFO, "Browser window set to full screen successfully");
         } catch (Exception e) {
-            ExtentLogger.fail("Unable to set window to full screen", true);
-            log(ERROR, "Unable to set window to full screen");
-            e.printStackTrace();
+            ExtentLogger.fail("Unable to set browser window to full screen", false);
+            log(ERROR, "Unable to set browser window to full screen. Exception: " + e.getMessage());
+            e.printStackTrace(); // Current behavior: prints stack trace.
         }
     }
 
     /**
-     * Sets the size of the browser window to the specified width and height.
+     * Sets the size of the current browser window to the specified width and height.
+     * <p>
+     * Logs the action to ExtentReports and the console log. If any exception occurs,
+     * it is caught, logged, and its stack trace is printed.
      *
-     * @param width the desired width of the window in pixels.
-     * @param height the desired height of the window in pixels.
+     * @param width  The desired width of the window in pixels.
+     * @param height The desired height of the window in pixels.
      */
     protected void setSizeWindow(int width, int height) {
         try {
             Dimension size = new Dimension(width, height);
             getDriver().manage().window().setSize(size);
-            ExtentLogger.pass("Window size set to width " + width + " and height " + height + " successfully", true);
+            ExtentLogger.pass("Window size set to width " + width + " and height " + height + " successfully", false);
             log(INFO, "Window size set to width " + width + " and height " + height + " successfully");
         } catch (Exception e) {
-            ExtentLogger.fail("Unable to set window size to width " + width + " and height " + height, true);
-            log(ERROR, "Unable to set window size to width " + width + " and height " + height);
-            e.printStackTrace();
+            ExtentLogger.fail("Unable to set window size to width " + width + " and height " + height, false);
+            log(ERROR, "Unable to set window size to width " + width + " and height " + height + ". Exception: " + e.getMessage());
+            e.printStackTrace(); // Current behavior: prints stack trace.
         }
     }
 
     /**
-     * Clears the text in the specified web element located using the given locator and wait strategy.
-     * Logs the outcome of the operation using ExtentLogger and a custom logger.
+     * Clears the content of an input web element (e.g., text field, text area)
+     * identified by the given locator, after applying the specified wait strategy.
+     * <p>
+     * Logs the action to ExtentReports and the console log. If any exception occurs,
+     * it is caught, logged, and its stack trace is printed.
      *
-     * @param by the locator used to find the web element
-     * @param waitStrategy the strategy to use for waiting until the web element is ready
-     * @param elementName the name of the element, used for logging purposes
+     * @param by           The {@link By} locator strategy to find the web element.
+     * @param waitStrategy The {@link WaitStrategy} to apply before attempting to clear the element.
+     * @param elementName  A descriptive name for the element, used for logging.
      */
     protected void clear(By by, WaitStrategy waitStrategy, String elementName) {
         try {
@@ -233,17 +282,20 @@ public class BaseAction {
             log(INFO, "Cleared text in element '" + elementName + "'");
         } catch (Exception e) {
             ExtentLogger.fail("Unable to clear text in element '" + elementName + "'", true);
-            log(ERROR, "Unable to clear text in element '" + elementName + "'");
-            e.printStackTrace();
+            log(ERROR, "Unable to clear text in element '" + elementName + "'. Exception: " + e.getMessage());
+            e.printStackTrace(); // Current behavior: prints stack trace.
         }
     }
 
     /**
-     * Retrieves the title of the current page using the WebDriver instance.
+     * Retrieves the title of the current browser window/tab.
      *
-     * @return the title of the current page as a String.
+     * @return The title of the current page as a String.
+     *         Returns {@code null} if the driver instance is not available, though this
+     *         is unlikely if driver initialization was successful.
      */
     protected String getTitle() {
+        // Consider adding null check for getDriver() or rely on caller to ensure driver is active.
         return getDriver().getTitle();
     }
 }

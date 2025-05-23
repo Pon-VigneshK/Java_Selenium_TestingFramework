@@ -9,234 +9,258 @@ import java.util.Date;
 import java.util.Objects;
 
 /**
- * FrameworkConstants holds all the constant values used within the framework.
- * If some value needs to be changed or modified often, then it should be stored in the property files.
+ * Provides access to framework-level constants, primarily file paths for resources, configurations,
+ * executables, and reports, as well as fixed names for sheets or keys used in data management.
+ * <p>
+ * This class has been refactored to promote stateless path generation where possible,
+ * deriving paths dynamically or relying on {@link PropertyUtils} for configuration-dependent values
+ * rather than storing mutable static state.
+ * <p>
+ * Constants that are truly fixed (e.g., a specific sheet name like "DATA") are defined as
+ * {@code public static final String}. Methods are provided for paths that might involve
+ * dynamic elements (like timestamps for reports) or are derived from base paths.
+ *
+ * @see org.gcit.utils.PropertyUtils
  */
 public final class FrameworkConstants {
 
     /**
      * Represents the user's current working directory.
-     * This variable is initialized with the value of the system property "user.dir".
+     * Initialized with the value of the system property {@code "user.dir"}.
      */
     private static final String USER_DIR = System.getProperty("user.dir");
+
     /**
-     * This constant holds the path to the test resources directory.
-     * It is dynamically composed using the user's current working directory.
-     * The path is typically used for locating files needed during testing, such as test data and configuration files.
+     * Base path to the {@code src/test/resources} directory.
+     * Dynamically composed using the user's current working directory.
+     * Used as a root for accessing test-specific resources like data files and configurations.
      */
     private static final String TEST_RESOURCES_PATH = USER_DIR + File.separator + "src" + File.separator + "test" + File.separator + "resources";
+
     /**
-     * Path to the configuration file used to load application-specific properties.
-     * This is constructed dynamically using the `TEST_RESOURCES_PATH` and the appropriate file separator.
+     * Path to the configuration directory within test resources: {@code src/test/resources/config}.
      */
     private static final String CONFIG_FILE_PATH = TEST_RESOURCES_PATH + File.separator + "config";
+
     /**
-     * Path to the ChromeDriver executable, constructed using the base test resources path
-     * and the file separator appropriate for the operating system.
-     *
-     * The path points to the "chromedriver.exe" file within the "executables" directory.
+     * Absolute path to the ChromeDriver executable: {@code src/test/resources/executables/chromedriver.exe}.
+     * This path is fixed and assumes the ChromeDriver is present at this location.
      */
-    private static final String CHROME_DRIVER_PATH = TEST_RESOURCES_PATH + File.separator + "executables" + File.separator + "chromedriver.exe";
+    public static final String CHROME_DRIVER_PATH = TEST_RESOURCES_PATH + File.separator + "executables" + File.separator + "chromedriver.exe";
+
     /**
-     * Path to the Excel file containing test data.
-     * This file is located within the test resources directory and is used to store and retrieve test data for execution.
+     * Absolute path to the main Excel test data file: {@code src/test/resources/testdata/excel/testdata.xlsx}.
+     * This file is expected to contain various sheets for test data management.
      */
-    // File paths for test data and configuration
-    private static final String EXCEL_PATH = TEST_RESOURCES_PATH + File.separator + "testdata" + File.separator + "excel" + File.separator + "testdata.xlsx";
+    public static final String EXCEL_PATH = TEST_RESOURCES_PATH + File.separator + "testdata" + File.separator + "excel" + File.separator + "testdata.xlsx";
+
     /**
-     * A constant that holds the file path for the JSON test data files.
-     * It is constructed using the base test resources path, along with directory separators
-     * and the directory name 'json'.
+     * Base path for JSON test data files: {@code src/test/resources/testdata/json}.
+     * Environment-specific JSON files are typically located under this directory.
+     * @see #getTestDataJsonFilePath(String)
+     * @see #getTestDataJsonFilePath()
      */
-    private static String TESTDATAJSONFILEPATH = TEST_RESOURCES_PATH + File.separator + "testdata" + File.separator + "json";
+    private static final String TESTDATA_JSON_BASE_PATH = TEST_RESOURCES_PATH + File.separator + "testdata" + File.separator + "json";
+
     /**
-     * The path to the database file used for testing purposes.
-     * This constant combines the base path for test resources with directory separators
-     * and specific subdirectory and file names to form the complete path to the test database file.
+     * Absolute path to the SQLite database file used for input data: {@code src/test/resources/testdata/database/inputData.db}.
      */
-    private static final String DATABASE_PATH = TEST_RESOURCES_PATH + File.separator + "testdata" + File.separator + "database" + File.separator + "inputData.db";
+    public static final String DATABASE_PATH = TEST_RESOURCES_PATH + File.separator + "testdata" + File.separator + "database" + File.separator + "inputData.db";
+
     /**
-     * The path to the main resources directory within the project's structure.
-     * This path is constructed dynamically based on the user's current directory.
-     *
-     * Example: "/user/dir/src/main/resources"
+     * Base path to the {@code src/main/resources} directory.
+     * Dynamically composed using the user's current working directory.
      */
     private static final String MAIN_RESOURCES_PATH = USER_DIR + File.separator + "src" + File.separator + "main" + File.separator + "resources";
+
     /**
-     * Path to the JSON file that contains the runner list run manager configuration.
-     * This variable is constructed using the main resources path and appends the specific path
-     * to the run manager JSON file.
+     * Absolute path to the {@code runmanager.json} file: {@code src/main/resources/runnerlist/runmanager.json}.
+     * This JSON file is used for configuring test execution, often defining which test cases to run.
      */
-    private static final String TESTCASE_JSON_PATH = MAIN_RESOURCES_PATH + File.separator + "runnerlist" + File.separator + "runmanager.json";
+    public static final String TESTCASE_JSON_PATH = MAIN_RESOURCES_PATH + File.separator + "runnerlist" + File.separator + "runmanager.json";
+
     /**
-     * The file path to the database configuration JSON file.
-     * This path is constructed using the main resources directory and specific subdirectories.
-     * It is used to load database configurations needed by the application.
+     * Absolute path to the database configuration JSON file: {@code src/main/resources/Configuration/DataBaseConfig.json}.
+     * This file contains parameters for connecting to databases.
      */
-    private static final String DBConfig_JSON_FILEPATH = MAIN_RESOURCES_PATH + File.separator + "Configuration" + File.separator + "DataBaseConfig.json";
+    public static final String DBConfig_JSON_FILEPATH = MAIN_RESOURCES_PATH + File.separator + "Configuration" + File.separator + "DataBaseConfig.json";
+
     /**
-     * The file path for the SQL queries JSON configuration file.
-     * This file contains the SQL query definitions used across the application.
+     * Absolute path to the SQL queries JSON file: {@code src/main/resources/Configuration/SqlQueries.json}.
+     * This file stores SQL query strings used by the framework.
      */
-    // Other constants
-    private static final String SELECTQUERY_JSON_FILEPATH = MAIN_RESOURCES_PATH + File.separator + "Configuration" + File.separator + "SqlQueries.json";
+    public static final String SELECTQUERY_JSON_FILEPATH = MAIN_RESOURCES_PATH + File.separator + "Configuration" + File.separator + "SqlQueries.json";
+
     /**
-     * The file path where the extent report will be stored.
-     * It is built using the base user directory and a designated subfolder for extent test outputs.
+     * Base directory path for storing Extent HTML reports: {@code extent-test-output} in the user's directory.
+     * Specific report files will be created within this directory.
      */
     private static final String EXTENT_REPORT_PATH = USER_DIR + File.separator + "extent-test-output";
+
     /**
-     * Specifies the path for storing generated Excel test reports.
-     * The path is constructed by combining the user's directory
-     * with a fixed subdirectory name "excel-test-report".
+     * Base directory path for storing Excel test reports: {@code excel-test-report} in the user's directory.
      */
     private static final String EXCEL_REPORT_PATH = USER_DIR + File.separator + "excel-test-report";
+
     /**
-     * Represents the timeout duration (in seconds) explicitly used for waiting operations
-     * within the framework, such as waiting for elements to be visible or interactable.
-     * The timeout value is retrieved from the configuration properties via PropertyUtils.
+     * Represents the current date and time when the {@link FrameworkConstants} class is loaded.
+     * This is used for generating consistent timestamps within a single test execution session for reports and logs.
+     * Note: This value is fixed at class loading time.
      */
-    private static final int EXPLICIT_WAIT = Integer.parseInt(PropertyUtils.getValue(ConfigProperties.EXPLICITWAITTIMEOUT));
-    /**
-     * Represents the current date and time when the application is running.
-     * This value is used for generating timestamps in reports and logs.
-     */
-    // Date and time formatting for reports
     private static final Date CURRENT_DATE = new Date();
+
     /**
-     * A string representing the current date and time, formatted as "MMM-dd-yyyy_HH_mm_ss_SSS".
-     * It is used throughout the framework for timestamping purposes, such as generating unique filenames for reports and logs.
+     * A string representing the date and time when the {@link FrameworkConstants} class was loaded,
+     * formatted as "MMM-dd-yyyy_HH_mm_ss_SSS".
+     * Used for timestamping files and directories to ensure uniqueness, e.g., for non-overwriting report generation.
+     * Note: This value is fixed at class loading time.
      */
     private static final String TODAY_DATE_TIME = new SimpleDateFormat("MMM-dd-yyyy_HH_mm_ss_SSS").format(CURRENT_DATE);
+
     /**
-     * Specifies the name of the data sheet within an Excel file.
+     * Constant for the name of the Excel sheet containing detailed test data: "DATA".
      */
-    // Sheet names in Excel files
-    private static final String DATA_EXCEL_SHEET = "DATA";
+    public static final String DATA_EXCEL_SHEET = "DATA";
+
     /**
-     * Specifies the name of the Excel sheet used for managing the run configurations.
+     * Constant for the name of the Excel sheet used for managing test execution suites or run configurations: "RUNMANAGER".
      */
-    private static final String RUNMANGER_EXCEL_SHEET = "RUNMANAGER";
+    public static final String RUNMANGER_EXCEL_SHEET = "RUNMANAGER";
+
     /**
-     * Represents a constant string value "RunManager" used within the framework.
+     * Constant string "RunManager", often used as a key or identifier related to test execution management components.
      */
-    private static final String RUNMANAGER = "RunManager";
+    public static final String RUNMANAGER = "RunManager";
+
     /**
-     * Constant representing the string identifier for the test case list.
-     * This is used within the framework to denote or fetch information pertaining to test cases.
+     * Constant string "testCaseLists", typically used as a key in JSON files or maps to identify a list of test cases.
      */
-    private static final String TESTCASE_LIST = "testCaseLists";
+    public static final String TESTCASE_LIST = "testCaseLists";
+
     /**
-     * A flag indicating the state within the FrameworkConstants.
-     * This flag can be utilized to toggle certain features or conditions
-     * within the framework based on its boolean value.
-     */
-    private static boolean flag = false;
-    /**
-     * Stores the class name used in the generation of reports.
-     * This variable helps in structuring and distinguishing various reports
-     * created by using different class names.
+     * Stores the class name to be used in the title or filename of generated reports.
+     * This is typically set by the test listener or runner to identify the specific test class being executed.
+     * This field is mutable and shared across the test execution.
      */
     private static String reportClassName = "";
     /**
      * Path to the report file that will be generated.
      * This variable is typically set to store the location of the generated report.
+     * Its value is cached after the first call to {@link #getReportPath()}.
      */
     private static String reportFilePath = "";
     /**
-     * Holds the current environment configuration value.
-     * This value is retrieved from configuration properties using the key ENV.
-     * The environment setting affects various aspects of the application's behavior and
-     * can be used to switch between different settings such as development, testing, or production.
-     */
-    private static String ENVIRONMENT = PropertyUtils.getValue(ConfigProperties.ENV);
-    /**
      * The file path where the Excel report will be stored.
+     * Its value is cached after the first call to {@link #getExcelReportPath()}.
      */
     private static String excelReportFilePath = "";
 
     /**
-     * Gets the name of the Run Manager Excel sheet.
+     * Gets the name of the "Run Manager" Excel sheet.
+     * This sheet typically controls which test cases or test suites are executed.
      *
-     * @return the name of the Run Manager Excel sheet as a String
+     * @return The name of the Run Manager Excel sheet ({@value #RUNMANGER_EXCEL_SHEET}).
      */
-
     public static String getRunmangerExcelSheet() {
         return RUNMANGER_EXCEL_SHEET;
     }
 
     /**
-     * Retrieves the file path of the test data JSON file.
+     * Retrieves the absolute file path for the JSON test data file corresponding to the currently configured environment.
+     * The environment is determined by {@link PropertyUtils#getValue(ConfigProperties)} with the {@code ENV} key.
+     * The filename is constructed as {@code <ENV>_TestData.json} (e.g., QA_TestData.json) and is located under
+     * the base JSON test data path.
      *
-     * @return The file path of the test data JSON file.
+     * @return The absolute path to the environment-specific JSON test data file.
+     * @see #TESTDATA_JSON_BASE_PATH
+     * @see PropertyUtils#getValue(ConfigProperties)
+     * @see ConfigProperties#ENV
      */
-    public static String getTestdataJsonFilepath() {
-        return TESTDATAJSONFILEPATH;
+    public static String getTestDataJsonFilePath() {
+        return TESTDATA_JSON_BASE_PATH + File.separator + PropertyUtils.getValue(ConfigProperties.ENV).toUpperCase() + "_TestData.json";
     }
 
     /**
-     * Retrieves the file path for the database configuration JSON file.
+     * Retrieves the absolute path to the database configuration JSON file ({@code DataBaseConfig.json}).
      *
-     * @return the file path of the database configuration JSON file.
+     * @return The path to the database configuration JSON file.
+     * @see #DBConfig_JSON_FILEPATH
      */
     public static String getDBConfigJSONPath() {
         return DBConfig_JSON_FILEPATH;
     }
 
     /**
-     * Retrieves the file path of the Excel file used in the framework.
+     * Retrieves the absolute path to the main Excel test data file ({@code testdata.xlsx}).
      *
-     * @return the file path of the Excel file.
+     * @return The path to the Excel test data file.
+     * @see #EXCEL_PATH
      */
     public static String getExcelFilePath() {
         return EXCEL_PATH;
     }
 
     /**
-     * Returns the current date and time as a string.
+     * Returns a formatted string representing the date and time when the {@link FrameworkConstants} class was loaded.
+     * The format is "MMM-dd-yyyy_HH_mm_ss_SSS". This timestamp is fixed at class loading and can be used for
+     * creating unique filenames or directories for a test run.
      *
-     * @return the current date and time in string format
+     * @return The formatted date and time string captured at class loading.
+     * @see #TODAY_DATE_TIME
      */
     public static String getTodayDateTime() {
         return TODAY_DATE_TIME;
     }
 
     /**
-     * Retrieves the file path for the test case JSON.
+     * Retrieves the absolute path to the {@code runmanager.json} file, which is used for test execution management.
      *
-     * @return the file path for the test case JSON as a String.
+     * @return The path to the {@code runmanager.json} file.
+     * @see #TESTCASE_JSON_PATH
      */
     public static String getTestCaseJsonPath() {
         return TESTCASE_JSON_PATH;
     }
 
     /**
-     * Retrieves the list of test cases.
+     * Retrieves the constant string "testCaseLists".
+     * This string is typically used as a key in JSON files or maps to identify a list of test cases.
      *
-     * @return A string representing the list of test cases.
+     * @return The string "testCaseLists".
+     * @see #TESTCASE_LIST
      */
     public static String getTestcaselist() {
         return TESTCASE_LIST;
     }
 
     /**
-     * Retrieves the run manager identifier.
+     * Retrieves the constant string "RunManager".
+     * This string is often used as a key or identifier for components related to test execution management.
      *
-     * @return The run manager identifier as a string.
+     * @return The string "RunManager".
+     * @see #RUNMANAGER
      */
     public static String getRunmanager() {
         return RUNMANAGER;
     }
 
     /**
-     * Creates the report path based on the configuration settings.
+     * Creates the full path for the Extent HTML report file.
+     * The path and filename can vary based on the {@code OVERRIDEREPORTS} configuration property:
+     * <ul>
+     *     <li>If "NO" ({@link ConfigProperties#OVERRIDEREPORTS}), a timestamped directory is created
+     *         (e.g., {@code extent-test-output/MMM-dd-yyyy_HH_mm_ss_SSS/reportClassName_Automation Report.html}).</li>
+     *     <li>Otherwise (e.g., "YES"), a fixed filename {@code index.html} is used within the base extent report path
+     *         (e.g., {@code extent-test-output/index.html}).</li>
+     * </ul>
+     * The {@code reportClassName} component is set via {@link #setReportClassName(String)}.
      *
-     * This method generates different report paths depending on whether
-     * overriding reports is enabled or not. If overriding is disabled,
-     * it creates a report path with the current date and time in the filename.
-     * Otherwise, it returns a default report path.
-     *
-     * @return the dynamically created report path as a String
+     * @return The dynamically created path for the Extent HTML report file.
+     * @throws RuntimeException if there is an error accessing configuration properties (e.g., {@code OVERRIDEREPORTS}).
+     * @see PropertyUtils#getValue(ConfigProperties)
+     * @see ConfigProperties#OVERRIDEREPORTS
+     * @see #getTodayDateTime()
+     * @see #reportClassName
      */
     private static String createReportPath() {
         try {
@@ -246,66 +270,78 @@ public final class FrameworkConstants {
                 return EXTENT_REPORT_PATH + File.separator + "index.html";
             }
         } catch (Exception e) {
-            e.printStackTrace();
-            return "";
+            // Consider logging this exception with LogService if available and appropriate
+            // For now, rethrowing as a runtime exception to ensure visibility of the error
+            throw new RuntimeException("Failed to create report path due to configuration error", e);
         }
-
     }
 
     /**
-     * Retrieves the file path for the ChromeDriver executable.
+     * Retrieves the absolute path to the ChromeDriver executable.
      *
-     * @return the ChromeDriver file path as a String.
+     * @return The ChromeDriver file path as a String.
+     * @see #CHROME_DRIVER_PATH
      */
     public static String getChromeDriverPath() {
         return CHROME_DRIVER_PATH;
     }
 
     /**
-     * Retrieves the file path for the SQL query JSON file.
+     * Retrieves the absolute path to the SQL queries JSON configuration file ({@code SqlQueries.json}).
      *
-     * @return The file path where the SQL queries JSON file is located.
+     * @return The path where the SQL queries JSON file is located.
+     * @see #SELECTQUERY_JSON_FILEPATH
      */
     public static String getSqlQueryjsonfilepath() {
         return SELECTQUERY_JSON_FILEPATH;
     }
 
     /**
-     * Returns the file path to the database.
+     * Returns the absolute path to the SQLite database file ({@code inputData.db}).
      *
-     * @return the path to the database.
+     * @return The path to the database file.
+     * @see #DATABASE_PATH
      */
     public static String getDatabasePath() {
         return DATABASE_PATH;
     }
 
     /**
-     * Creates the file path for the Excel report.
+     * Creates the full path for the Excel report file.
+     * The path and filename can vary based on the {@code OVERRIDEREPORTS} configuration property:
+     * <ul>
+     *     <li>If "YES" ({@link ConfigProperties#OVERRIDEREPORTS}), a timestamped filename is generated
+     *         (e.g., {@code excel-test-report/MMM-dd-yyyy_HH_mm_ss_SSS_Automation_Report.xlsx}).</li>
+     *     <li>Otherwise (e.g., "NO"), a fixed filename {@code Automation_Report.xlsx} is used within the base Excel report path.</li>
+     * </ul>
      *
-     * @return the path of the Excel report file as a String.
-     *         Returns the current date and time in the file name if report overriding is enabled in the configuration;
-     *         otherwise, returns a file path with a generic name.
-     * @throws RuntimeException if there is an error in retrieving the configuration properties.
+     * @return The dynamically created path for the Excel report file.
+     * @throws RuntimeException if there is an error accessing configuration properties (e.g., {@code OVERRIDEREPORTS}).
+     * @see PropertyUtils#getValue(ConfigProperties)
+     * @see ConfigProperties#OVERRIDEREPORTS
+     * @see #getTodayDateTime()
      */
     public static String createExcelReportPath() {
         try {
+            // Ensure OVERRIDEREPORTS is fetched directly
             if (PropertyUtils.getValue(ConfigProperties.OVERRIDEREPORTS).equalsIgnoreCase("Yes")) {
-                String path = EXCEL_REPORT_PATH + File.separator + getTodayDateTime() + "_Automation_Report.xlsx";
-                System.out.println(path);
-                return path;
+                return EXCEL_REPORT_PATH + File.separator + getTodayDateTime() + "_Automation_Report.xlsx";
             } else {
                 return EXCEL_REPORT_PATH + File.separator + "Automation_Report.xlsx";
             }
         } catch (Exception e) {
-            throw new RuntimeException(e);
+            // Consider logging this exception with LogService
+            throw new RuntimeException("Failed to create Excel report path due to configuration error", e);
         }
     }
 
     /**
-     * Retrieves the file path for the Excel report. If the path is not yet set, it
-     * creates a new path using the configuration settings.
+     * Retrieves the file path for the Excel report.
+     * If the path has not been generated for the current session, it calls {@link #createExcelReportPath()}
+     * to generate it based on configuration. Subsequent calls in the same session return the cached path.
      *
-     * @return the file path of the Excel report as a String.
+     * @return The file path of the Excel report as a String.
+     * @see #createExcelReportPath()
      */
     public static String getExcelReportPath() {
         if (excelReportFilePath.isEmpty()) {
@@ -315,28 +351,35 @@ public final class FrameworkConstants {
     }
 
     /**
-     * Sets the name of the report class.
+     * Sets the class name to be used for naming Extent HTML reports when {@code OVERRIDEREPORTS} is "NO".
+     * This method allows different test classes to generate uniquely named report files within a timestamped directory.
      *
-     * @param reportClassName the fully qualified name of the report class to be set
+     * @param reportClassName The simple name or fully qualified name of the test class. This name will be
+     *                        incorporated into the report's filename.
      */
     public static void setReportClassName(String reportClassName) {
         FrameworkConstants.reportClassName = reportClassName;
     }
 
     /**
-     * Retrieves the file path of the configuration properties file.
+     * Retrieves the absolute path to the main configuration properties file ({@code config.properties}).
+     * This file is expected to be located under the path defined by {@link #CONFIG_FILE_PATH}.
      *
-     * @return the complete file path of the configuration properties file.
+     * @return The complete file path of the {@code config.properties} file.
      */
     public static String getConfigFilePath() {
         return CONFIG_FILE_PATH + File.separator + "config.properties";
     }
 
     /**
-     * Returns the path of the report file. If the report file path is not already set,
-     * it initializes the path by calling the createReportPath method.
+     * Retrieves the full path for the Extent HTML report file.
+     * If the path has not been generated for the current session, it calls {@link #createReportPath()}
+     * to generate it based on configuration and the currently set {@code reportClassName}.
+     * Subsequent calls in the same session return the cached path.
      *
-     * @return The path of the report file as a String.
+     * @return The path of the Extent HTML report file.
+     * @see #createReportPath()
+     * @see #setReportClassName(String)
      */
     public static String getReportPath() {
         if (reportFilePath.isEmpty()) {
@@ -346,84 +389,34 @@ public final class FrameworkConstants {
     }
 
     /**
-     * Retrieves the file path of the test data JSON file.
+     * Retrieves the absolute file path for a JSON test data file for a specific environment.
+     * The filename is constructed as {@code <environmentName>_TestData.json} (e.g., QA_TestData.json)
+     * and is located under the base JSON test data path ({@link #TESTDATA_JSON_BASE_PATH}).
+     * If {@code environmentName} is null, "QA" is used as a default.
      *
-     * @return the file path of the test data JSON file.
-     */
-    public static String getTestDataJsonFilePath() {
-        return TESTDATAJSONFILEPATH;
-    }
-
-    /**
-     * Sets the file path for the test data JSON file based on the specified environment name.
-     * If the given environment name is null, the file path will be set using the current environment.
-     *
-     * @param environmentName the name of the environment for which to set the test data JSON file path
-     */
-    public static void setTestDataJsonFilePath(String environmentName) {
-        if (!flag) {
-            if (Objects.isNull(environmentName))
-                TESTDATAJSONFILEPATH = TESTDATAJSONFILEPATH + File.separator + environmentName.toUpperCase() + "_TestData.json";
-            else
-                TESTDATAJSONFILEPATH = TESTDATAJSONFILEPATH + File.separator + getEnvironment().toUpperCase() + "_TestData.json";
-            flag = true;
-        }
-
-    }
-
-    /**
-     * Retrieves the file path for the test data JSON file based on the provided environment name.
-     *
-     * @param environmentName the name of the environment for which the file path is required.
-     * @return the file path for the test data JSON file corresponding to the provided environment name.
-     *         If the flag is set, an empty string is returned. If the environment name is null, a default
-     *         file path is provided.
+     * @param environmentName The name of the environment (e.g., "QA", "DEV", "UAT"). Case will be normalized to uppercase.
+     *                        If null, "QA" is used.
+     * @return The absolute path to the specified environment's JSON test data file.
+     * @see #TESTDATA_JSON_BASE_PATH
      */
     public static String getTestDataJsonFilePath(String environmentName) {
-        if (!flag) {
-            if (Objects.isNull(environmentName))
-                return TESTDATAJSONFILEPATH + File.separator + "QA_TestData.json";  // Assuming a default name if environmentName is null
-            else
-                return TESTDATAJSONFILEPATH + File.separator + environmentName.toUpperCase() + "_TestData.json";
-        } else {
-            return "";
+        if (Objects.isNull(environmentName)) {
+            environmentName = "QA"; // Default to QA if null
         }
+        return TESTDATA_JSON_BASE_PATH + File.separator + environmentName.toUpperCase() + "_TestData.json";
     }
 
-
     /**
-     * Retrieves the name of the data Excel sheet.
+     * Gets the name of the Excel sheet that contains the primary test data.
      *
-     * @return the name of the data Excel sheet
+     * @return The name of the data Excel sheet ({@value #DATA_EXCEL_SHEET}).
+     * @see #DATA_EXCEL_SHEET
      */
     public static String getDataExcelSheet() {
         return DATA_EXCEL_SHEET;
     }
 
-    /**
-     * Returns the current environment setting of the application.
-     *
-     * @return the current environment setting as a string.
-     */
-    public static String getEnvironment() {
-        return ENVIRONMENT;
-    }
-
-    /**
-     * Sets the environment for the application.
-     *
-     * @param environment The environment to be set, such as "development", "testing", or "production".
-     */
-    public static void setEnvironment(String environment) {
-        FrameworkConstants.ENVIRONMENT = environment;
-    }
-
-    /**
-     * Retrieves the duration for explicit wait used in the framework.
-     *
-     * @return the explicit wait duration as an integer.
-     */
-    public static int getExplicitWait() {
-        return EXPLICIT_WAIT;
-    }
+    // Note: getEnvironment() and getExplicitWait() methods were removed as these values
+    // are now intended to be fetched directly via PropertyUtils where needed,
+    // promoting statelessness in FrameworkConstants.
 }

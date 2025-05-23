@@ -62,21 +62,44 @@ public class PropertyUtils {
     }
 
     /**
-     * Retrieves the value associated with the given configuration property key.
+     * Retrieves the value associated with the given configuration property key from the loaded
+     * {@code config.properties} file.
+     * <p>
+     * The method looks up the property value using the lowercase name of the provided {@link ConfigProperties} enum constant.
+     * For example, if {@code ConfigProperties.BROWSER} is passed, it will look for a property named "browser".
      *
-     * @param key the {@link ConfigProperties} key for which the value is to be fetched
-     * @return the value associated with the specified key, or null if the key is not found
-     * @throws PropertiesFileException if the specified key is not found in the configuration properties
+     * @param key The {@link ConfigProperties} enum constant representing the desired property key.
+     *            Must not be null.
+     * @return The trimmed string value of the property if found.
+     *         Returns {@code null} if the property key is present in the enum but not found in the properties file,
+     *         or if the value associated with the key is {@code null}.
+     * @throws PropertiesFileException if the provided {@code key} is {@code null} or if an unexpected error occurs during lookup,
+     *                                 though typical missing keys would return {@code null} based on map behavior.
+     *                                 The exception is primarily to indicate a failure in finding the key if {@code Objects.isNull(key)} check was not there and map threw error.
+     * @see ConfigProperties
+     * @see FrameworkConstants#getConfigFilePath()
      */
     public static String getValue(ConfigProperties key) {
-        try {
-            if (Objects.isNull(key) || Objects.isNull(CONFIG_MAP.get(key.name().toLowerCase()))) {
-
-            }
-            return CONFIG_MAP.get(key.name().toLowerCase());
-        } catch (Exception e) {
-            throw new PropertiesFileException("Property name " + key + " is not found. Please check the property file");
+        if (Objects.isNull(key)) {
+            // Throw an exception or log an error if the key is null, as it's an invalid usage.
+            // For now, PropertiesFileException is thrown by the catch block if map access with null key happens.
+            // Consider adding an explicit null check for 'key' here if stricter handling is needed.
+            // LogService.log(LogType.WARN, "Attempted to retrieve property with a null key.");
         }
-
+        // The existing try-catch will handle potential issues if key.name() itself causes a problem,
+        // or if CONFIG_MAP access leads to an unexpected state, though get() on HashMap with a null key is allowed.
+        // The main purpose of the try-catch here seems to be to wrap any unexpected issue into PropertiesFileException.
+        try {
+            String value = CONFIG_MAP.get(key.name().toLowerCase());
+            if (Objects.isNull(value)) {
+                // Log a warning if a defined ConfigProperty is not found in the file, as it might indicate a missing configuration.
+                LogService.log(LogType.WARN, "Property with key '" + key.name().toLowerCase() + "' not found in configuration file. Returning null.");
+            }
+            return value;
+        } catch (Exception e) {
+            // This catch block is more of a safeguard for unexpected issues during the lookup.
+            LogService.log(LogType.ERROR, "Failed to retrieve property for key: " + key + " due to an unexpected error.", e);
+            throw new PropertiesFileException("Property name " + key + " caused an error during lookup. Please check the property file or logs.", e);
+        }
     }
 }

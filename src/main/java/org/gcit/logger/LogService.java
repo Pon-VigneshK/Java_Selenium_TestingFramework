@@ -9,59 +9,73 @@ import java.util.Map;
 import java.util.function.Consumer;
 
 /**
- * LogService is a utility class for handling different levels of logging messages.
- * The class leverages a Logger to log messages categorized by various LogType levels
- * such as TRACE, DEBUG, INFO, WARN, ERROR, and FATAL.
- * The class operates using a static logger and a map that associates each LogType
- * with its corresponding logging action.
+ * Centralized utility class for logging messages throughout the framework.
+ * <p>
+ * This service uses Apache Log4j 2 as the underlying logging engine. It provides a simplified
+ * interface for logging by mapping a custom {@link LogType} enum to corresponding
+ * Log4j logging levels (TRACE, DEBUG, INFO, WARN, ERROR, FATAL).
+ * <p>
+ * Messages logged via this service are prefixed with their {@link LogType} (e.g., "INFO: Login successful").
+ * The actual logging behavior (e.g., output format, appenders like console or file)
+ * is configured in the Log4j 2 configuration file (typically {@code log4j2.xml} or {@code log4j2.properties})
+ * in the classpath.
+ * <p>
+ * This class is final and cannot be instantiated; all methods are static.
+ *
+ * @see LogType
+ * @see org.apache.logging.log4j.Logger
+ * @see org.apache.logging.log4j.LogManager
  */
 public class LogService {
     /**
-     * Logger instance used to log messages for the LogService class.
-     * The logger operates at different log levels such as TRACE, DEBUG, INFO, WARN, ERROR, and FATAL.
-     * It is retrieved using LogManager to facilitate logging operations in LogService.
+     * The underlying Apache Log4j 2 Logger instance used for all logging operations in this service.
+     * It is obtained once using {@link LogManager#getLogger()} for this class.
      */
     private static final Logger logger = LogManager.getLogger();
+
     /**
-     * A Consumer that logs TRACE level messages using the preconfigured logger.
-     * Formats the log message with a "TRACE: " prefix.
+     * A {@link Consumer} that logs messages at the TRACE level via Log4j.
+     * Messages are prefixed with "TRACE: ".
      */
     private static final Consumer<String> TRACE = message -> logger.trace("TRACE: {}", message);
+
     /**
-     * A constant Consumer that logs messages with WARN level using the logger.
-     * This variable is utilized to log warning messages formatted with a "WARN: {}" prefix.
+     * A {@link Consumer} that logs messages at the WARN level via Log4j.
+     * Messages are prefixed with "WARN: ".
      */
     private static final Consumer<String> WARN = message -> logger.warn("WARN: {}", message);
+
     /**
-     * DEBUG is a logging Consumer that logs messages at the DEBUG level.
-     * It formats messages with a specific prefix "DEBUG: ".
-     * This Consumer uses the logger to log messages intended to provide
-     * fine-grained informational events useful in debugging an application.
+     * A {@link Consumer} that logs messages at the DEBUG level via Log4j.
+     * Messages are prefixed with "DEBUG: ".
      */
     private static final Consumer<String> DEBUG = message -> logger.debug("DEBUG: {}", message);
+
     /**
-     * A consumer that logs messages at the ERROR level.
-     * This consumer accepts a string message and logs it using the logger's error method.
+     * A {@link Consumer} that logs messages at the ERROR level via Log4j.
+     * Messages are prefixed with "ERROR: ".
+     * This consumer is also used by the overloaded {@link #log(LogType, String, Throwable)} method
+     * when logging exceptions at the ERROR level.
      */
     private static final Consumer<String> ERROR = message -> logger.error("ERROR: {}", message);
+
     /**
-     * The INFO variable is a Consumer functional interface
-     * designed to handle logging of informational messages
-     * using the logger instance. It formats the message
-     * with the "INFO:" prefix before logging it.
+     * A {@link Consumer} that logs messages at the INFO level via Log4j.
+     * Messages are prefixed with "INFO: ".
      */
     private static final Consumer<String> INFO = message -> logger.info("INFO: {}", message);
+
     /**
-     * A Consumer functional interface instance to log messages at the FATAL level.
-     * It prefixes the logged message with "FATAL: " and uses the logger's fatal method
-     * to record messages indicating critical system errors that may lead to an application
-     * shutdown.
+     * A {@link Consumer} that logs messages at the FATAL level via Log4j.
+     * Messages are prefixed with "FATAL: ".
      */
     private static final Consumer<String> FATAL = message -> logger.fatal("FATAL: {}", message);
+
     /**
-     * A map that associates each LogType with its corresponding logging action.
-     * This map is statically initialized to map each LogType to an appropriate
-     * Consumer<String> that defines how messages of that log type should be handled.
+     * A static {@link EnumMap} that maps each {@link LogType} enum constant to its corresponding
+     * logging action (a {@link Consumer<String>}). This map is initialized in a static block
+     * and is used by the {@link #log(LogType, String)} and {@link #log(LogType, String, Throwable)}
+     * methods to perform the appropriate logging operation.
      */
     private static final Map<LogType, Consumer<String>> LOGSMAP = new EnumMap<>(LogType.class);
 
@@ -82,17 +96,69 @@ public class LogService {
     }
 
     /**
-     * Logs a message using the specified log type.
+     * Logs a message with the specified {@link LogType} and detail message.
+     * <p>
+     * This method retrieves the appropriate logging action (a {@link Consumer<String>}) from the
+     * {@link #LOGSMAP} based on the provided {@code logType}. It then invokes this consumer
+     * with the given {@code message}.
+     * <p>
+     * If the {@code logType} is not found in the map (which should not happen if {@link LogType}
+     * is correctly populated in {@link #LOGSMAP}), a warning message is logged via Log4j indicating
+     * an unsupported log type.
      *
-     * @param logType the type of log to be used for the given message. Possible values are TRACE, DEBUG, INFO, WARN, ERROR, and FATAL.
-     * @param message the message to be logged.
+     * @param logType The {@link LogType} enum value specifying the severity or category of the log message
+     *                (e.g., {@link LogType#INFO}, {@link LogType#ERROR}).
+     * @param message The message string to be logged.
      */
     public static void log(LogType logType, String message) {
         Consumer<String> consumer = LOGSMAP.get(logType);
         if (consumer != null) {
             consumer.accept(message);
         } else {
-            logger.warn("Unsupported log type: " + logType);
+            // This case should ideally not occur if LOGSMAP is always in sync with LogType enum
+            logger.warn("Unsupported log type provided: " + logType + ". Message: " + message);
+        }
+    }
+
+    /**
+     * Logs a message with the specified {@link LogType}, detail message, and an associated {@link Throwable}.
+     * <p>
+     * This method is primarily intended for logging error conditions that include an exception.
+     * It constructs a combined message string including the original message and the throwable's message.
+     * Then, it uses the underlying Log4j logger to log this combined message along with the full stack trace
+     * of the throwable, at the level corresponding to the given {@code logType}.
+     * <p>
+     * For example, if {@code logType} is {@link LogType#ERROR}, the message and stack trace will be logged
+     * using {@code logger.error(combinedMessage, throwable)}.
+     *
+     * @param logType   The {@link LogType} enum value (e.g., {@link LogType#ERROR}, {@link LogType#FATAL}).
+     * @param message   The main message string to be logged.
+     * @param throwable The {@link Throwable} (e.g., an exception) to be logged, including its stack trace.
+     */
+    public static void log(LogType logType, String message, Throwable throwable) {
+        String fullMessage = message + (throwable == null ? "" : " | Exception: " + throwable.getMessage());
+        switch (logType) {
+            case TRACE:
+                logger.trace(fullMessage, throwable);
+                break;
+            case DEBUG:
+                logger.debug(fullMessage, throwable);
+                break;
+            case INFO:
+                logger.info(fullMessage, throwable);
+                break;
+            case WARN:
+                logger.warn(fullMessage, throwable);
+                break;
+            case ERROR:
+                logger.error(fullMessage, throwable);
+                break;
+            case FATAL:
+                logger.fatal(fullMessage, throwable);
+                break;
+            default:
+                logger.warn("Unsupported log type provided: " + logType + " for message with throwable: " + fullMessage, throwable);
+                break;
         }
     }
 }

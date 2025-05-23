@@ -4,7 +4,9 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.gcit.constants.FrameworkConstants;
 import org.gcit.enums.DataBaseProperties;
+import org.gcit.enums.LogType;
 import org.gcit.exceptions.JsonExceptions;
+import org.gcit.logger.LogService;
 
 import java.io.File;
 import java.io.FileNotFoundException;
@@ -34,9 +36,11 @@ public class JsonConfigUtils {
                     });
 
         } catch (FileNotFoundException e) {
-            e.printStackTrace();
+            LogService.log(LogType.ERROR, "Database configuration JSON file not found: " + FrameworkConstants.getDBConfigJSONPath(), e);
+            throw new JsonExceptions("Database configuration JSON file not found: " + FrameworkConstants.getDBConfigJSONPath(), e);
         } catch (IOException e) {
-            e.printStackTrace();
+            LogService.log(LogType.ERROR, "Error reading database configuration JSON file: " + FrameworkConstants.getDBConfigJSONPath(), e);
+            throw new JsonExceptions("Error reading database configuration JSON file: " + FrameworkConstants.getDBConfigJSONPath(), e);
         }
     }
 
@@ -50,18 +54,35 @@ public class JsonConfigUtils {
     /**
      * Retrieves the configuration value for the given database property key.
      *
-     * @param key the database property key of type DataBaseProperties whose corresponding value is to be fetched.
-     * @return the configuration value associated with the given key from the configuration map.
-     * @throws Exception if the key is not found in the JSON configuration map.
+     * @param key The {@link DataBaseProperties} enum constant representing the desired database configuration key.
+     *            Must not be null.
+     * @return The string value of the database property if found.
+     *         Returns {@code null} if the property key is present in the enum but not found in the JSON configuration,
+     *         or if the value associated with the key is {@code null}.
+     * @throws JsonExceptions if the provided {@code key} is {@code null}, if the key is not found in the JSON configuration map,
+     *                        or if an unexpected error occurs during lookup. The original exception causing this will be wrapped.
+     * @see DataBaseProperties
+     * @see FrameworkConstants#getDBConfigJSONPath()
      */
-    public static String get(DataBaseProperties key) throws Exception {
-        try {
-            if (Objects.isNull(key) || Objects.isNull(CONFIGMAP.get(key.name().toLowerCase()))) {
-            }
-            return CONFIGMAP.get(key.name().toLowerCase());
-        } catch (Exception e) {
-            throw new JsonExceptions("Property name " + key + " is not found in the JSON file. Please check the DataBaseConfig.json file.");
+    public static String get(DataBaseProperties key) throws JsonExceptions {
+        if (Objects.isNull(key)) {
+            // This case should ideally lead to an exception before map access.
+            // The current catch-all would handle it, but explicit is better.
+            LogService.log(LogType.ERROR, "Attempted to retrieve database property with a null key.");
+            throw new JsonExceptions("Attempted to retrieve database property with a null key. Key cannot be null.");
         }
-
+        try {
+            String value = CONFIGMAP.get(key.name().toLowerCase());
+            if (Objects.isNull(value)) {
+                // Log a warning if a defined DataBaseProperty is not found in the JSON file.
+                LogService.log(LogType.WARN, "Database property with key '" + key.name().toLowerCase() + "' not found in " + FrameworkConstants.getDBConfigJSONPath() + ". Returning null.");
+            }
+            return value;
+        } catch (Exception e) {
+            // This catch block is for any unexpected issues during lookup from the map,
+            // though most common cases (null key, key not found) are handled above or by map behavior.
+            LogService.log(LogType.ERROR, "Failed to retrieve database property for key: " + key + " from " + FrameworkConstants.getDBConfigJSONPath(), e);
+            throw new JsonExceptions("Property name " + key.name() + " is not found or caused an error during lookup in the JSON file. Please check the DataBaseConfig.json file.", e);
+        }
     }
 }

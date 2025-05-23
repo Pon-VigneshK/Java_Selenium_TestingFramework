@@ -14,57 +14,96 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * The MethodInterceptor class implements the IMethodInterceptor interface and is used to dynamically
- * modify or filter test methods based on specific criteria. It integrates with the testing framework
- * to provide control over test method execution, including setting descriptions, priorities, and
- * invocation counts.
+ * Implements the TestNG {@link org.testng.IMethodInterceptor} interface to dynamically
+ * filter and modify the list of test methods that TestNG will execute.
+ * <p>
+ * This interceptor plays a crucial role in enabling data-driven test execution by:
+ * <ol>
+ *   <li>Reading a "runner list" (a list of test cases and their execution parameters) from a configured
+ *       data source (database, Excel, or JSON, determined by the {@code DATASOURCE} property).</li>
+ *   <li>Filtering the initial list of test methods provided by TestNG. Only methods that are
+ *       present in the runner list and marked for execution (e.g., "execute" flag is "yes") are retained.</li>
+ *   <li>Modifying the retained test methods by setting their description, priority, and invocation count
+ *       based on the data from the runner list.</li>
+ * </ol>
+ * The invocation counts set here are accessible via {@link #getInvocation(String)}, which can be used by
+ * data providers (like {@link DataProviderUtils}) to supply the correct number of data sets.
  *
- * This class interacts with various data sources (e.g., database, Excel, JSON) to determine which
- * test methods should be executed and with what parameters.
+ * @see org.testng.IMethodInterceptor
+ * @see JsonUtils
+ * @see PropertyUtils
+ * @see ConfigProperties#DATASOURCE
+ * @see FrameworkConstants
  */
 public class MethodInterceptor implements IMethodInterceptor {
     /**
-     * A static Map to keep track of the number of times each test method has been invoked.
-     * The key is a String representing the method name, and the value is an Integer representing
-     * the number of times the method has been invoked.
-     *
-     * This map is updated dynamically during the interception process of test methods
-     * based on specified criteria. It is particularly useful for managing and controlling
-     * the execution flow of test cases, ensuring that methods are invoked the correct number of times
-     * as determined from various data sources like database, Excel, or JSON.
+     * A static map that stores the desired invocation count for each test method.
+     * The key is the test method name (e.g., "testLoginFeature"), and the value is the number of times
+     * TestNG should invoke this method.
+     * <p>
+     * This map is populated by the {@link #intercept(List, ITestContext)} method based on the "count"
+     * attribute found in the runner list (e.g., from Excel or database).
+     * It is then used by {@link #getInvocation(String)} to provide these counts, typically to a data provider.
      */
     private static final Map<String, Integer> invocationCounts = new HashMap<>();
+
     /**
-     * A list that stores maps, where each map contains key-value pairs representing various test case details.
-     * The keys in the maps are typically strings (such as "testcasename", "execute", "testdescription", "priority", and "count"),
-     * and the corresponding values can be of different types (Object).
-     * This list is used to dynamically hold and access test details fetched from different data sources.
-     *
-     * Example keys in the map:
-     * - "testcasename" (String): Name of the test case.
-     * - "execute" (String): Indicates whether the test case should be executed ("yes" or "no").
-     * - "testdescription" (String): Description of the test case.
-     * - "priority" (Integer): Priority level of the test case.
-     * - "count" (Integer): Number of times the test case should be invoked.
+     * An instance field to hold the list of test case details fetched from the configured data source
+     * (e.g., Excel, DB via JSON, or direct JSON). Each map in the list represents a test case
+     * and contains details like "testcasename", "execute", "testdescription", "priority", and "count".
+     * This list is populated at the beginning of the {@link #intercept(List, ITestContext)} method.
      */
     List<Map<String, Object>> list = new ArrayList<>();
 
     /**
-     * Retrieves the invocation count for a specified method.
+     * Retrieves the configured invocation count for a given test method name.
+     * <p>
+     * This method queries the static {@link #invocationCounts} map, which is populated by the
+     * {@link #intercept(List, ITestContext)} method. The count determines how many times
+     * a TestNG test method should be invoked, often corresponding to different sets of test data.
      *
-     * @param methodName the name of the method for which the invocation count is required
-     * @return the invocation count of the specified method, or 1 if the method is not found in the invocation counts map
+     * @param methodName The name of the test method (e.g., as obtained from {@code ITestResult.getMethod().getMethodName()}).
+     * @return The configured invocation count for the specified method. If the method name is not found
+     *         in the {@link #invocationCounts} map (e.g., if it wasn't in the runner list or had no count specified),
+     *         this method defaults to returning {@code 1}.
      */
     public static int getInvocation(String methodName) {
-        return invocationCounts.getOrDefault(methodName, 1);
+        return invocationCounts.getOrDefault(methodName, 1); // Default to 1 if no specific count is set
     }
 
     /**
-     * Intercepts and filters the list of test methods based on specified criteria from a data source.
+     * Intercepts the list of test methods that TestNG intends to run and returns a modified list
+     * based on external configuration (e.g., from Excel, database, or JSON).
+     * <p>
+     * This method is automatically called by TestNG before it starts executing the test methods.
+     * It performs the following key operations:
+     * <ol>
+     *   <li>Determines the data source for the "runner list" (list of test cases to run) based on the
+     *       {@code DATASOURCE} property (from {@link PropertyUtils}).</li>
+     *   <li>Fetches the runner list using appropriate methods from {@link JsonUtils}.
+     *       For "db" or "excel" sources, this involves {@link JsonUtils} generating an intermediate
+     *       JSON runner list if needed, then parsing it. For "json", it reads directly.</li>
+     *   <li>Iterates through the original list of {@code methods} provided by TestNG.</li>
+     *   <li>For each method, it searches for a matching entry in the fetched runner list
+     *       (based on "testcasename" and "execute" status being "yes").</li>
+     *   <li>If a match is found:
+     *     <ul>
+     *       <li>The test method's description, priority, and invocation count are updated from the runner list data.</li>
+     *       <li>The invocation count is stored in the static {@link #invocationCounts} map for later retrieval
+     *           (e.g., by a data provider via {@link #getInvocation(String)}).</li>
+     *       <li>The method instance is added to the {@code results} list, which will be returned to TestNG.</li>
+     *     </ul>
+     *   </li>
+     * </ol>
+     * Only methods that are found in the runner list and marked for execution will be included in the returned list.
      *
-     * @param methods The list of test methods to be filtered.
-     * @param iTestContext The test context containing runtime information about the test execution.
-     * @return A filtered list of test methods that meet the criteria specified in the data source.
+     * @param methods      A list of {@link IMethodInstance} objects representing all test methods
+     *                     TestNG intends to run.
+     * @param iTestContext The {@link ITestContext} for the current test execution. Not directly used in this
+     *                     implementation but available for more complex scenarios.
+     * @return A {@code List<IMethodInstance>} containing only those test methods that are configured
+     *         to run, with their properties (description, priority, invocation count) potentially modified.
+     * @throws IllegalArgumentException if the configured {@code DATASOURCE} is unknown.
      */
     @Override
     public List<IMethodInstance> intercept(List<IMethodInstance> methods, ITestContext iTestContext) {
